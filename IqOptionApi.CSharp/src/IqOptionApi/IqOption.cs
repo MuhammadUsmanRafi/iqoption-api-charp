@@ -107,9 +107,7 @@ public sealed class IqOption : IAsyncDisposable
     public event Action<string>? Disconnected;
 
     /// <summary>Automatic reconnect finished and every stream was subscribed again.</summary>
-#pragma warning disable CS0067 // raised by the reconnect loop (Task 15)
     public event Action? Reconnected;
-#pragma warning restore CS0067
 
     /// <summary>Valid candle sizes in seconds.</summary>
     public static IReadOnlyList<int> CandleSizes { get; } =
@@ -286,8 +284,113 @@ public sealed class IqOption : IAsyncDisposable
         if (_closing || !_connected) return;
         Log("connection lost: " + reason);
         RaiseDisconnected(reason);
-        if (!_o.AutoReconnect) _connected = false;
-        // Task 15 starts the reconnect loop here.
+        if (_o.AutoReconnect) _ = Task.Run(ReconnectLoopAsync);
+        else _connected = false;
+    }
+
+    private async Task ReconnectLoopAsync()
+    {
+        if (!await _reconnecting.WaitAsync(0).ConfigureAwait(false)) return;
+        try
+        {
+            IReadOnlyList<TimeSpan> delays = _o.ReconnectDelays is { Count: > 0 } custom ? custom : DefaultReconnectDelays;
+            for (int attempt = 0; !_closing; attempt++)
+            {
+                await Task.Delay(delays[Math.Min(attempt, delays.Count - 1)]).ConfigureAwait(false);
+                if (_closing) return;
+                (bool Success, string? Reason, bool LoginRejected) r;
+                try
+                {
+                    r = await ConnectCoreAsync(resetBalance: false, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    r = (false, ex.Message, false);
+                }
+                if (_closing)
+                {
+                    await _conn.CloseSocketAsync().ConfigureAwait(false);
+                    return;
+                }
+                if (r.Success)
+                {
+                    Log("reconnected");
+                    await RecoverResultsAsync().ConfigureAwait(false);
+                    try
+                    {
+                        Reconnected?.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("Reconnected handler threw: " + ex.Message);
+                    }
+                    return;
+                }
+                if (r.LoginRejected)
+                {
+                    _connected = false;
+                    RaiseDisconnected("login failed: " + r.Reason);
+                    return;
+                }
+                Log($"reconnect attempt {attempt + 1} failed: {r.Reason}");
+            }
+        }
+        finally
+        {
+            _reconnecting.Release();
+        }
+    }
+
+    /// <summary>Trade results pushed while offline are lost; ask the history once for every pending CheckWin call.</summary>
+    private async Task RecoverResultsAsync()
+    {
+        long[] binary, digital;
+        lock (_track)
+        {
+            binary = _pendingBinary.ToArray();
+            digital = _pendingDigital.ToArray();
+        }
+        foreach (long id in binary)
+        {
+            if (ClosedProfit(id) != null) continue;
+            try
+            {
+                if (await RawCheckWinAsync(id, CancellationToken.None).ConfigureAwait(false) is double pnl)
+                {
+                    lock (_track) _recovered[id] = pnl;
+                }
+            }
+            catch (Exception ex) when (IsFailure(ex) || ex is FormatException)
+            {
+                Log($"could not recover the result of option {id}: {ex.Message}");
+            }
+        }
+        foreach (long orderId in digital)
+        {
+            if (DigitalCloseProfit(orderId) != null) continue;
+            JsonNode? external;
+            lock (_s.Lock)
+            {
+                external = _s.OrderAsync.TryGetValue(orderId, out var d) && d.TryGetValue("position-changed", out var pc)
+                    ? Path(pc, "msg", "external_id")
+                    : null;
+            }
+            if (J.IsNull(external)) continue;
+            try
+            {
+                var reply = await GetDigitalPositionByPositionIdAsync(J.Long(external), CancellationToken.None).ConfigureAwait(false);
+                if (Path(reply, "msg", "position") is not JsonObject pos || J.Str(pos["status"]) != "closed") continue;
+                double profit = J.Str(pos["close_reason"]) == "expired"
+                    ? J.Dbl(pos["pnl_realized"]) - J.Dbl(pos["buy_amount"])
+                    : J.Dbl(pos["pnl_realized"]);
+                lock (_track) _recoveredDigital[orderId] = profit;
+            }
+            catch (Exception ex) when (IsFailure(ex) || ex is FormatException)
+            {
+                Log($"could not recover the result of digital order {orderId}: {ex.Message}");
+            }
+        }
+        _conn.Pulse.Pulse();
     }
 
     private void RaiseDisconnected(string reason)
