@@ -261,6 +261,163 @@ internal static class J
     public static JsonObject Obj(JsonNode? n) => n as JsonObject ?? throw new FormatException("Expected a JSON object");
 }
 
+/// <summary>Expiry maths and formulas ported 1:1 from the Python library (Cat §4).</summary>
+internal static partial class Helpers
+{
+    /// <summary>Python <c>datetime.fromtimestamp(ts)</c> (naive local time).</summary>
+    internal static DateTime LocalFromEpoch(double ts, TimeZoneInfo tz)
+    {
+        long micros = (long)Math.Round(ts * 1_000_000d, MidpointRounding.ToEven);
+        var utc = DateTime.SpecifyKind(DateTime.UnixEpoch.AddTicks(micros * 10), DateTimeKind.Utc);
+        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeFromUtc(utc, tz), DateTimeKind.Unspecified);
+    }
+
+    /// <summary>Python <c>time.mktime(dt.timetuple())</c> (drops microseconds).</summary>
+    internal static double ToEpoch(DateTime local, TimeZoneInfo tz)
+    {
+        var t = new DateTime(local.Year, local.Month, local.Day, local.Hour, local.Minute, local.Second, DateTimeKind.Unspecified);
+        if (tz.IsInvalidTime(t)) t = t.AddHours(1);
+        return (TimeZoneInfo.ConvertTimeToUtc(t, tz) - DateTime.UnixEpoch).TotalSeconds;
+    }
+
+    private static DateTime TruncMinute(DateTime d) => new(d.Year, d.Month, d.Day, d.Hour, d.Minute, 0, DateTimeKind.Unspecified);
+
+    private static List<double> Candidates(double timestamp, int quarterCount, TimeZoneInfo tz)
+    {
+        var expDate = TruncMinute(LocalFromEpoch(timestamp, tz));
+        expDate = (double)(long)ToEpoch(expDate.AddMinutes(1), tz) - timestamp > 30 ? expDate.AddMinutes(1) : expDate.AddMinutes(2);
+        var exp = new List<double>();
+        for (int i = 0; i < 5; i++)
+        {
+            exp.Add(ToEpoch(expDate, tz));
+            expDate = expDate.AddMinutes(1);
+        }
+        int index = 0;
+        expDate = TruncMinute(LocalFromEpoch(timestamp, tz));
+        while (index < quarterCount)
+        {
+            if (expDate.Minute % 15 == 0 && (long)ToEpoch(expDate, tz) - (long)timestamp > 60 * 5)
+            {
+                exp.Add(ToEpoch(expDate, tz));
+                index++;
+            }
+            expDate = expDate.AddMinutes(1);
+        }
+        return exp;
+    }
+
+    /// <summary>Python <c>expiration.get_expiration_time</c>; <paramref name="now"/> replaces <c>time.time()</c>.</summary>
+    internal static (long Exp, int Index) GetExpirationTime(double timestamp, int duration, double now, TimeZoneInfo tz)
+    {
+        var exp = Candidates(timestamp, 50, tz);
+        int best = 0;
+        long bestDistance = long.MaxValue;
+        for (int i = 0; i < exp.Count; i++)
+        {
+            long distance = Math.Abs(((long)exp[i] - (long)now) - 60L * duration);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        return ((long)exp[best], best);
+    }
+
+    /// <summary>Python <c>expiration.get_remaning_time</c>.</summary>
+    internal static List<(int Label, long Seconds)> GetRemainingTime(double timestamp, double now, TimeZoneInfo tz)
+    {
+        var exp = Candidates(timestamp, 11, tz);
+        var result = new List<(int, long)>();
+        for (int i = 0; i < exp.Count; i++)
+            result.Add((i >= 5 ? 15 * (i - 4) : i + 1, (long)exp[i] - (long)now));
+        return result;
+    }
+
+    /// <summary>Python <c>expiration.get_digital_exp</c>: int for duration 1, otherwise a float.</summary>
+    internal static (double Value, bool IsFloat) DigitalExp(long timestamp, int duration, double now, TimeZoneInfo tz)
+    {
+        if (duration == 1) return (GetExpirationTime(timestamp, 1, now, tz).Exp, false);
+        var d = LocalFromEpoch(timestamp, tz).AddMinutes(1).AddSeconds(30);
+        while (!(d.Minute % duration == 0 && ToEpoch(d, tz) - timestamp > 30))
+            d = d.AddMinutes(1);
+        return (ToEpoch(d, tz), true);
+    }
+
+    /// <summary>Python <c>Strike_list.get_digital_expiration_time</c>.</summary>
+    internal static long StrikeListExpiration(long timestamp, int duration, TimeZoneInfo tz)
+    {
+        int minute = LocalFromEpoch(timestamp, tz).Minute;
+        long ans = timestamp - timestamp % 60;
+        ans += (duration - minute % duration) * 60L;
+        if (timestamp > ans - 10) ans += duration * 60L;
+        return ans;
+    }
+
+    internal static double PayoutFraction(double commission) => (100.0 - commission) / 100.0;
+
+    internal static int BlitzPercent(double fraction) => (int)(fraction * 100);
+
+    internal static double DigitalProfitPercent(double ask) => ((100 - ask) * 100) / ask;
+
+    internal static string StrikeKey(double value) => (value * 10e-7).ToString("F6", CultureInfo.InvariantCulture);
+
+    internal static bool TryParseSpotMinutes(string symbol, out int minutes)
+    {
+        minutes = 0;
+        string[] parts = symbol.Split('T');
+        return parts.Length >= 2
+            && int.TryParse(parts[1].Split('M')[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out minutes);
+    }
+
+    /// <summary>Python <c>round(x, 2)</c>: half-even on the exact binary value.</summary>
+    internal static double PyRound2(double x)
+    {
+        if (!double.IsFinite(x) || x == 0) return x;
+        long bits = BitConverter.DoubleToInt64Bits(x);
+        bool neg = bits < 0;
+        int exp = (int)((bits >> 52) & 0x7FF);
+        long mantissa = bits & 0xFFFFFFFFFFFFFL;
+        if (exp == 0) exp = 1;
+        else mantissa |= 1L << 52;
+        exp -= 1075;
+        BigInteger num = new BigInteger(mantissa) * 100, den = BigInteger.One;
+        if (exp > 0) num <<= exp;
+        else den <<= -exp;
+        BigInteger q = BigInteger.DivRem(num, den, out BigInteger r);
+        int cmp = (r * 2).CompareTo(den);
+        if (cmp > 0 || (cmp == 0 && !q.IsEven)) q += 1;
+        double result = (double)q / 100.0;
+        return neg ? -result : result;
+    }
+
+    /// <summary>Digital sell-back value (Cat §4.7.8, Python bug with the call flag kept by callers).</summary>
+    internal static double SpotProfitAfterSale(double strike, double lower, double upper, double f, double f2,
+        bool isCall, double rate, double count, double amount)
+    {
+        double k = strike;
+        if (lower != k)
+        {
+            if (lower > k || k > upper)
+            {
+                k = isCall ? (upper - k) / Math.Abs(upper - lower) : (k - upper) / Math.Abs(upper - lower);
+                f = Math.Abs(f2 - f);
+            }
+            else if (isCall)
+            {
+                f += ((k - lower) / (upper - lower)) * (f2 - f);
+            }
+            else
+            {
+                k = (upper - k) / (upper - lower);
+                f -= f2;
+            }
+            f = f2 + (k * f);
+        }
+        return (f / rate) * count - amount;
+    }
+}
+
 internal static class Marker
 {
 }
