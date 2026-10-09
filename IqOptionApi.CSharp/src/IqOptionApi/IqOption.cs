@@ -1338,5 +1338,319 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Digital
+
+    private Obj DigitalPlaceFrame(string instrumentId, double amount)
+    {
+        if (instrumentId.StartsWith("do", StringComparison.Ordinal))
+        {
+            string assetId = instrumentId.Split("do")[1].Split('A')[0];
+            return new Obj
+            {
+                ["name"] = "digital-options.place-digital-option",
+                ["version"] = "2.0",
+                ["body"] = new Obj
+                {
+                    ["user_balance_id"] = Bal,
+                    ["instrument_id"] = instrumentId,
+                    ["instrument_index"] = 0,
+                    ["amount"] = PyJson.Str(amount),
+                    ["asset_id"] = int.Parse(assetId, CultureInfo.InvariantCulture),
+                },
+            };
+        }
+        return new Obj
+        {
+            ["name"] = "digital-options.place-digital-option",
+            ["version"] = "1.0",
+            ["body"] = new Obj { ["user_balance_id"] = Bal, ["instrument_id"] = instrumentId, ["amount"] = PyJson.Str(amount) },
+        };
+    }
+
+    private bool HasAsync(long id, string name)
+    {
+        lock (_s.Lock) return _s.HasAsync(id, name);
+    }
+
+    private JsonObject AsyncMessage(long id, string name)
+    {
+        lock (_s.Lock) return _s.OrderAsync[id][name];
+    }
+
+    /// <summary>Buys a digital spot option (Python <c>buy_digital_spot</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="amount">Stake.</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="minutes">Expiry in minutes (1, 5, 15).</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns><c>(true, positionId, null)</c> or <c>(false, 0, error)</c>.</returns>
+    public async Task<(bool Success, long Id, string? Error)> BuyDigitalSpotAsync(string asset, double amount, Direction direction, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        double now = Now;
+        var (exp, _) = Helpers.DigitalExp((long)now, minutes, now, _tz);
+        string instrumentId = Helpers.DigitalSpotInstrumentId(Act(asset), exp, minutes, direction);
+        JsonObject reply;
+        try
+        {
+            reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), rid, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, 0, Reason(ex));
+        }
+        if (reply["msg"] is not JsonObject m || !m.ContainsKey("id"))
+            return (false, 0, J.Str(Path(reply, "msg", "message")) ?? reply.ToJsonString());
+        long orderId = J.Long(m["id"]);
+        if (!await WaitCondAsync(() => HasAsync(orderId, "position-changed"), T, ct).ConfigureAwait(false)) return (false, 0, "timeout");
+        var external = Path(AsyncMessage(orderId, "position-changed"), "msg", "external_id");
+        return J.IsNull(external) ? (false, 0, null) : (true, J.Long(external), null);
+    }
+
+    /// <summary>Buys any digital instrument id, e.g. a strike from <see cref="GetRealtimeStrikeListAsync"/> (Python <c>buy_digital</c>).</summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="instrumentId">Instrument id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? OrderChanged, string? Error)> BuyDigitalAsync(double amount, string instrumentId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            var reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), rid, ct).ConfigureAwait(false);
+            if (reply["msg"] is not JsonObject m || !m.ContainsKey("id"))
+                return (false, null, J.Str(Path(reply, "msg", "message")) ?? reply.ToJsonString());
+            long orderId = J.Long(m["id"]);
+            if (!await WaitCondAsync(() => HasAsync(orderId, "order-changed"), T, ct).ConfigureAwait(false)) return (false, null, "timeout");
+            return (true, AsyncMessage(orderId, "order-changed"), null);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null, Reason(ex));
+        }
+    }
+
+    /// <summary>Sells a digital position early (Python <c>close_digital_option</c>).</summary>
+    /// <param name="positionId">Position id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<bool> CloseDigitalOptionAsync(long positionId, CancellationToken ct = default) =>
+        DigitalResultAsync(new Obj { ["name"] = "digital-options.close-position", ["version"] = "1.0", ["body"] = new Obj { ["position_id"] = positionId } }, ct);
+
+    /// <summary>Sells several digital positions early (Python <c>close_digital_option_batch</c>).</summary>
+    /// <param name="positionIds">Position ids.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<bool> CloseDigitalOptionBatchAsync(IEnumerable<long> positionIds, CancellationToken ct = default) =>
+        DigitalResultAsync(new Obj { ["name"] = "digital-options.close-position-batch", ["version"] = "1.0", ["body"] = new Obj { ["position_ids"] = positionIds.ToList() } }, ct);
+
+    private async Task<bool> DigitalResultAsync(Obj msg, CancellationToken ct)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            var r = await ById("result", msg, rid, ct).ConfigureAwait(false);
+            return J.IsTrue(Path(r, "msg", "success"));
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Waits until a digital trade closes (Python <c>check_win_digital_v2</c>, waiting like <c>check_win_digital</c>). No timeout.</summary>
+    /// <param name="orderId">Order id (or position id) of the trade.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(TradeResult Result, double Profit)> CheckWinDigitalAsync(long orderId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _pendingDigital.Add(orderId);
+        try
+        {
+            double? profit = null;
+            await _conn.WaitUntilAsync(() => (profit = DigitalCloseProfit(orderId)) != null, null, ct).ConfigureAwait(false);
+            return (Helpers.ResultOf(profit!.Value), profit.Value);
+        }
+        finally
+        {
+            lock (_track) _pendingDigital.Remove(orderId);
+        }
+    }
+
+    private double? DigitalCloseProfit(long orderId)
+    {
+        lock (_s.Lock)
+        {
+            if (_s.OrderAsync.TryGetValue(orderId, out var d) && d.TryGetValue("position-changed", out var pc)
+                && pc["msg"] is JsonObject m && J.Str(m["status"]) == "closed")
+            {
+                if (J.Str(m["close_reason"]) == "expired") return J.Dbl(m["close_profit"]) - J.Dbl(m["invest"]);
+                if (J.Str(m["close_reason"]) != "default") Log($"digital {orderId} closed with reason '{J.Str(m["close_reason"])}', using pnl_realized");
+                return J.Dbl(m["pnl_realized"]);
+            }
+        }
+        lock (_track) return _recoveredDigital.TryGetValue(orderId, out double p) ? p : null;
+    }
+
+    /// <summary>Strike ids for an expiry (Python <c>get_strike_list</c>): raw message plus <c>{"%.6f" price: (call, put)}</c>, or null strikes if unreadable.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(JsonObject Raw, Dictionary<string, (string Call, string Put)>? Strikes)> GetStrikeListAsync(string asset, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        long exp = Helpers.StrikeListExpiration((long)Now, minutes, _tz);
+        var raw = await ByName("strike-list", new Obj
+        {
+            ["name"] = "get-strike-list",
+            ["body"] = new Obj { ["type"] = "digital-option", ["underlying"] = asset, ["expiration"] = exp * 1000, ["period"] = minutes * 60 },
+            ["version"] = "4.0",
+        }, "", ct).ConfigureAwait(false);
+        try
+        {
+            var strikes = new Dictionary<string, (string, string)>();
+            foreach (var s in J.Arr(Path(raw, "msg", "strike")))
+                strikes[Helpers.StrikeKey(J.Dbl(s!["value"]))] = (J.Str(Path(s, "call", "id"))!, J.Str(Path(s, "put", "id"))!);
+            return (raw, strikes);
+        }
+        catch (FormatException ex)
+        {
+            Log("get-strike-list: " + ex.Message);
+            return (raw, null);
+        }
+    }
+
+    /// <summary>Streams digital quotes and payouts for an expiry (Python <c>subscribe_strike_list</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task SubscribeStrikeListAsync(string asset, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var msg = StrikeSubscribeMsg(asset, minutes);
+        lock (_track)
+        {
+            if (!_strikeSubscriptions.Contains((asset, minutes))) _strikeSubscriptions.Add((asset, minutes));
+        }
+        await Send("subscribeMessage", msg, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops <see cref="SubscribeStrikeListAsync"/> (Python <c>unsubscribe_strike_list</c>; the server filter has no period).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UnsubscribeStrikeListAsync(string asset, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _strikeSubscriptions.Remove((asset, minutes));
+        await Send("unsubscribeMessage", StrikeUnsubscribeMsg(asset), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Live strikes with ids and payout % (Python <c>get_realtime_strike_list</c>); waits for the first quote. Needs <see cref="SubscribeStrikeListAsync"/>.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<Dictionary<string, StrikeQuote>> GetRealtimeStrikeListAsync(string asset, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        int period = minutes * 60;
+        await _conn.WaitUntilAsync(() => { lock (_s.Lock) return _s.Quotes.TryGetValue(asset, out var q) && q.TryGetValue(period, out var d) && d.Count > 0; }, T, ct)
+            .ConfigureAwait(false);
+        lock (_s.Lock) return new Dictionary<string, StrikeQuote>(_s.Quotes[asset][period]);
+    }
+
+    /// <summary>The last raw quote message for an expiry (Python <c>get_instrument_quites_generated_data</c>); waits for it.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetInstrumentQuotesGeneratedDataAsync(string asset, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        int period = minutes * 60;
+        await _conn.WaitUntilAsync(() => { lock (_s.Lock) return _s.QuotesRaw.TryGetValue(asset, out var q) && q.ContainsKey(period); }, T, ct)
+            .ConfigureAwait(false);
+        lock (_s.Lock) return _s.QuotesRaw[asset][period];
+    }
+
+    /// <summary>Current spot payout % (Python <c>get_digital_current_profit</c>); null if not streamed yet.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    public double? GetDigitalCurrentProfit(string asset, int minutes)
+    {
+        lock (_s.Lock) return _s.DigitalProfit.TryGetValue(asset, out var d) && d.TryGetValue(minutes * 60, out var p) ? p : null;
+    }
+
+    /// <summary>Estimated profit if the spot position were sold now (Python <c>get_digital_spot_profit_after_sale</c>, Python's formula kept as-is).</summary>
+    /// <param name="positionId">Position id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<double?> GetDigitalSpotProfitAfterSaleAsync(long positionId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        await _conn.WaitUntilAsync(() => HasAsync(positionId, "position-changed"), T, ct).ConfigureAwait(false);
+        var p = J.Obj(Path(AsyncMessage(positionId, "position-changed"), "msg", "raw_event"));
+        var extra = J.Obj(p["extra_data"]);
+        int duration = (int)(J.Dbl(p["instrument_period"]) / 60);
+        var quotes = await GetInstrumentQuotesGeneratedDataAsync(J.Str(p["instrument_underlying"])!, duration, ct).ConfigureAwait(false);
+        double? Bid(string? id)
+        {
+            foreach (var row in J.Arr(Path(quotes, "msg", "prices")))
+            {
+                if (J.Str(Path(row, "call", "symbol")) == id) return J.DblOrNull(Path(row, "call", "bid"));
+                if (J.Str(Path(row, "put", "symbol")) == id) return J.DblOrNull(Path(row, "put", "bid"));
+            }
+            return null;
+        }
+        double? fNow = Bid(J.Str(extra["lower_instrument_id"])), f2Now = Bid(J.Str(extra["upper_instrument_id"]));
+        double f, f2;
+        lock (_track)
+        {
+            var cached = _afterSale.TryGetValue(positionId, out var c) ? c : (0, 0);
+            f = fNow ?? cached.F;
+            f2 = f2Now ?? cached.F2;
+            _afterSale[positionId] = (f, f2);
+        }
+        return Helpers.SpotProfitAfterSale(
+            J.Dbl(p["instrument_strike_value"]) / 1000000.0,
+            J.Dbl(extra["lower_instrument_strike"]) / 1000000.0,
+            J.Dbl(extra["upper_instrument_strike"]) / 1000000.0,
+            f, f2, isCall: false, J.Dbl(p["currency_rate"]), J.Dbl(p["count"]),
+            Math.Max(J.Dbl(p["buy_amount"]), J.Dbl(p["sell_amount"])));
+    }
+
+    /// <summary>Digital position for an order (Python <c>get_digital_position</c>): waits for its position id, then asks the server.</summary>
+    /// <param name="orderId">Order id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetDigitalPositionAsync(long orderId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        await _conn.WaitUntilAsync(() => HasAsync(orderId, "position-changed"), T, ct).ConfigureAwait(false);
+        return await GetDigitalPositionByPositionIdAsync(J.Long(Path(AsyncMessage(orderId, "position-changed"), "msg", "external_id")), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Digital position by position id (Python <c>get_digital_position_by_position_id</c>); the whole message.</summary>
+    /// <param name="positionId">Position id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetDigitalPositionByPositionIdAsync(long positionId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        return await ByName("position", new Obj { ["name"] = "digital-options.get-position", ["body"] = new Obj { ["position_id"] = positionId } }, "", ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Digital options opened on any device, by position id (Python <c>get_digital_open_by_other_pc</c>).</summary>
+    public IReadOnlyDictionary<long, JsonObject> GetDigitalOpenByOtherPc()
+    {
+        lock (_s.Lock) return new Dictionary<long, JsonObject>(_s.DigitalOpened);
+    }
+
+    /// <summary>Forgets one entry of <see cref="GetDigitalOpenByOtherPc"/>.</summary>
+    /// <param name="id">Position id.</param>
+    public void DelDigitalOpenByOtherPc(long id)
+    {
+        lock (_s.Lock) _s.DigitalOpened.Remove(id);
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }

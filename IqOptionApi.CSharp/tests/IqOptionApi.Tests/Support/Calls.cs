@@ -90,6 +90,42 @@ internal static class Calls
             case "GetOptionOpenByOtherPc":
                 return new JsonObject(api.GetOptionOpenByOtherPc().Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value.DeepClone())));
 
+            case "BuyDigitalSpotAsync":
+            {
+                var (ok, id, err) = await api.BuyDigitalSpotAsync(S(a, "asset"), D(a, "amount"), Dir(a), I(a, "minutes"));
+                return Tuple(ok, ok ? (object)id : err);
+            }
+            case "BuyDigitalAsync":
+            {
+                var (ok, changed, err) = await api.BuyDigitalAsync(D(a, "amount"), S(a, "instrumentId"));
+                return Tuple(ok, ok ? (object?)changed : err);
+            }
+            case "CloseDigitalOptionAsync": return await api.CloseDigitalOptionAsync(L(a, "id"));
+            case "CloseDigitalOptionBatchAsync": return await api.CloseDigitalOptionBatchAsync(Longs(a, "ids"));
+            case "CheckWinDigitalAsync": return Tuple(true, (await api.CheckWinDigitalAsync(L(a, "id"))).Profit);
+            case "GetStrikeListAsync":
+            {
+                var (raw, strikes) = await api.GetStrikeListAsync(S(a, "asset"), I(a, "minutes"));
+                return Tuple(raw, strikes == null ? null : new JsonObject(strikes.Select(x => KeyValuePair.Create(x.Key,
+                    (JsonNode?)new JsonObject { ["call"] = x.Value.Call, ["put"] = x.Value.Put }))));
+            }
+            case "SubscribeStrikeListAsync": await api.SubscribeStrikeListAsync(S(a, "asset"), I(a, "minutes")); return null;
+            case "UnsubscribeStrikeListAsync": await api.UnsubscribeStrikeListAsync(S(a, "asset"), I(a, "minutes")); return null;
+            case "GetRealtimeStrikeListAsync":
+                return new JsonObject((await api.GetRealtimeStrikeListAsync(S(a, "asset"), I(a, "minutes"))).Select(x => KeyValuePair.Create(x.Key,
+                    (JsonNode?)new JsonObject
+                    {
+                        ["call"] = new JsonObject { ["id"] = x.Value.CallId, ["profit"] = x.Value.CallProfit },
+                        ["put"] = new JsonObject { ["id"] = x.Value.PutId, ["profit"] = x.Value.PutProfit },
+                    })));
+            case "GetInstrumentQuotesGeneratedDataAsync": return await api.GetInstrumentQuotesGeneratedDataAsync(S(a, "asset"), I(a, "minutes"));
+            case "GetDigitalCurrentProfit": return ToNode(api.GetDigitalCurrentProfit(S(a, "asset"), I(a, "minutes")));
+            case "GetDigitalSpotProfitAfterSaleAsync": return ToNode(await api.GetDigitalSpotProfitAfterSaleAsync(L(a, "id")));
+            case "GetDigitalPositionByPositionIdAsync": return await api.GetDigitalPositionByPositionIdAsync(L(a, "id"));
+            case "GetDigitalPositionAsync": return await api.GetDigitalPositionAsync(L(a, "id"));
+            case "GetDigitalOpenByOtherPc":
+                return new JsonObject(api.GetDigitalOpenByOtherPc().Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value.DeepClone())));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);

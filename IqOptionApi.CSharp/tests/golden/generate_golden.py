@@ -568,6 +568,77 @@ def build_cases():
                   "msg": {"source": "binary-options", "status": "open", "external_id": 901, "raw_event": {}}}],
          "call": lambda iq: iq.get_option_open_by_other_pc(), "csharp": {"method": "GetOptionOpenByOtherPc", "args": {}}},
     ]
+    PLACED = {"on": "sendMessage:digital-options.place-digital-option", "reply": [
+        {"name": "digital-option-placed", "request_id": "$RID", "msg": {"id": 555}},
+        {"name": "position-changed", "microserviceName": "portfolio",
+         "msg": {"source": "digital-options", "status": "open", "external_id": 777, "raw_event": {"order_ids": [555]}}}]}
+    QUOTES = {"name": "client-price-generated", "msg": {"asset_id": 1861, "prices": [
+        {"strike": "SPT", "call": {"symbol": "do1861A20261009D123300T1MCSPT", "ask": 52.5, "bid": 47.5},
+         "put": {"symbol": "do1861A20261009D123300T1MPSPT", "ask": 48.0, "bid": 51.0}},
+        {"strike": "1170000", "call": {"symbol": "C1", "ask": 60, "bid": 47}, "put": {"symbol": "P1", "ask": 41, "bid": 50}},
+        {"strike": "1171000", "call": {"symbol": "C2", "ask": 55, "bid": 40}, "put": {"symbol": "P2", "bid": 55}}]}}
+    OPEN_777 = {"name": "position-changed", "microserviceName": "portfolio", "msg": {
+        "source": "digital-options", "status": "open", "external_id": 777,
+        "raw_event": {"order_ids": [555], "instrument_id": "do1861A20261009D123300T1MCSPT", "instrument_underlying": "EURUSD",
+                      "buy_amount": 1, "sell_amount": 0, "instrument_period": 60, "count": 1.9,
+                      "instrument_strike_value": 1170500, "currency_rate": 1,
+                      "extra_data": {"lower_instrument_strike": 1170000, "upper_instrument_strike": 1171000,
+                                     "lower_instrument_id": "C1", "upper_instrument_id": "C2"}}}}
+    CLOSED_555 = {"name": "position-changed", "microserviceName": "portfolio", "msg": {
+        "source": "digital-options", "status": "closed", "close_reason": "expired", "close_profit": 1.9, "invest": 1,
+        "pnl_realized": 0.9, "external_id": 777, "raw_event": {"order_ids": [555]}}}
+    RESULT_OK = {"name": "result", "request_id": "$RID", "msg": {"success": True}}
+    POSITION_REPLY = {"on": "sendMessage:digital-options.get-position",
+                      "reply": [{"name": "position", "request_id": "", "msg": {"position": {"id": 777, "status": "open"}}}]}
+    cases += [
+        {"name": "buy_digital_spot_1m", "call": lambda iq: iq.buy_digital_spot("EURUSD", 1, "call", 1), "rules": [PLACED],
+         "csharp": {"method": "BuyDigitalSpotAsync", "args": {"asset": "EURUSD", "amount": 1, "direction": "call", "minutes": 1}}},
+        {"name": "buy_digital_spot_5m", "call": lambda iq: iq.buy_digital_spot("EURUSD-OTC", 1.5, "put", 5), "rules": [PLACED],
+         "csharp": {"method": "BuyDigitalSpotAsync", "args": {"asset": "EURUSD-OTC", "amount": 1.5, "direction": "put", "minutes": 5}}},
+        {"name": "buy_digital_spot_rejected", "call": lambda iq: iq.buy_digital_spot("EURUSD", 1, "call", 1),
+         "rules": [{"on": "sendMessage:digital-options.place-digital-option",
+                    "reply": [{"name": "digital-option-placed", "request_id": "$RID", "msg": {"message": "fail"}}]}],
+         "csharp": {"method": "BuyDigitalSpotAsync", "args": {"asset": "EURUSD", "amount": 1, "direction": "call", "minutes": 1}},
+         "compare_result": False},
+        {"name": "buy_digital", "call": lambda iq: iq.buy_digital(1, "do1861A20261009D123400T1MCSPT"),
+         "rules": [{"on": "sendMessage:digital-options.place-digital-option", "reply": [
+             {"name": "digital-option-placed", "request_id": "$RID", "msg": {"id": 556}},
+             {"name": "order-changed", "microserviceName": "portfolio",
+              "msg": {"source": "digital-options", "raw_event": {"position_id": 778, "id": 556}}}]}],
+         "csharp": {"method": "BuyDigitalAsync", "args": {"amount": 1, "instrumentId": "do1861A20261009D123400T1MCSPT"}}},
+        {"name": "close_digital_option", "call": lambda iq: iq.close_digital_option(777),
+         "rules": [{"on": "sendMessage:digital-options.close-position", "reply": [RESULT_OK]}],
+         "csharp": {"method": "CloseDigitalOptionAsync", "args": {"id": 777}}},
+        {"name": "close_digital_option_batch", "call": lambda iq: iq.close_digital_option_batch([777, 778]),
+         "rules": [{"on": "sendMessage:digital-options.close-position-batch", "reply": [RESULT_OK]}],
+         "csharp": {"method": "CloseDigitalOptionBatchAsync", "args": {"ids": [777, 778]}}},
+        {"name": "check_win_digital", "pre": [CLOSED_555], "call": lambda iq: iq.check_win_digital_v2(555),
+         "csharp": {"method": "CheckWinDigitalAsync", "args": {"id": 555}}},
+        {"name": "get_strike_list", "call": lambda iq: iq.get_strike_list("EURUSD", 1),
+         "rules": [{"on": "sendMessage:get-strike-list", "reply": [{"name": "strike-list", "request_id": "", "msg": {"strike": [
+             {"value": "1170000", "call": {"id": "C1"}, "put": {"id": "P1"}},
+             {"value": 1171000, "call": {"id": "C2"}, "put": {"id": "P2"}}]}}]}],
+         "csharp": {"method": "GetStrikeListAsync", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "subscribe_strike_list", "call": lambda iq: iq.subscribe_strike_list("EURUSD", 1),
+         "csharp": {"method": "SubscribeStrikeListAsync", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "unsubscribe_strike_list", "call": lambda iq: iq.unsubscribe_strike_list("EURUSD", 1),
+         "csharp": {"method": "UnsubscribeStrikeListAsync", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "get_realtime_strike_list", "pre": [QUOTES], "call": lambda iq: iq.get_realtime_strike_list("EURUSD", 1),
+         "csharp": {"method": "GetRealtimeStrikeListAsync", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "get_instrument_quotes", "pre": [QUOTES], "call": lambda iq: iq.get_instrument_quites_generated_data("EURUSD", 1),
+         "csharp": {"method": "GetInstrumentQuotesGeneratedDataAsync", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "get_digital_current_profit", "pre": [QUOTES], "call": lambda iq: iq.get_digital_current_profit("EURUSD", 1),
+         "csharp": {"method": "GetDigitalCurrentProfit", "args": {"asset": "EURUSD", "minutes": 1}}},
+        {"name": "get_digital_spot_profit_after_sale", "pre": [OPEN_777, QUOTES],
+         "call": lambda iq: iq.get_digital_spot_profit_after_sale(777),
+         "csharp": {"method": "GetDigitalSpotProfitAfterSaleAsync", "args": {"id": 777}}},
+        {"name": "get_digital_position_by_position_id", "call": lambda iq: iq.get_digital_position_by_position_id(777),
+         "rules": [POSITION_REPLY], "csharp": {"method": "GetDigitalPositionByPositionIdAsync", "args": {"id": 777}}},
+        {"name": "get_digital_position", "pre": [OPEN_777], "call": lambda iq: iq.get_digital_position(555),
+         "rules": [POSITION_REPLY], "csharp": {"method": "GetDigitalPositionAsync", "args": {"id": 555}}},
+        {"name": "digital_open_by_other_pc", "pre": [OPEN_777], "call": lambda iq: iq.get_digital_open_by_other_pc(),
+         "csharp": {"method": "GetDigitalOpenByOtherPc", "args": {}}},
+    ]
     # @@CASES@@
     return cases
 

@@ -6281,6 +6281,965 @@
     }
    },
    "compare_result": true
+  },
+  {
+   "name": "buy_digital_spot_1m",
+   "csharp": {
+    "method": "BuyDigitalSpotAsync",
+    "args": {
+     "asset": "EURUSD",
+     "amount": 1,
+     "direction": "call",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.place-digital-option",
+     "reply": [
+      {
+       "name": "digital-option-placed",
+       "request_id": "$RID",
+       "msg": {
+        "id": 555
+       }
+      },
+      {
+       "name": "position-changed",
+       "microserviceName": "portfolio",
+       "msg": {
+        "source": "digital-options",
+        "status": "open",
+        "external_id": 777,
+        "raw_event": {
+         "order_ids": [
+          555
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.place-digital-option\", \"version\": \"2.0\", \"body\": {\"user_balance_id\": 10004, \"instrument_id\": \"do1861A20261009D123100T1MCSPT\", \"instrument_index\": 0, \"amount\": \"1\", \"asset_id\": 1861}}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    777
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_digital_spot_5m",
+   "csharp": {
+    "method": "BuyDigitalSpotAsync",
+    "args": {
+     "asset": "EURUSD-OTC",
+     "amount": 1.5,
+     "direction": "put",
+     "minutes": 5
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.place-digital-option",
+     "reply": [
+      {
+       "name": "digital-option-placed",
+       "request_id": "$RID",
+       "msg": {
+        "id": 555
+       }
+      },
+      {
+       "name": "position-changed",
+       "microserviceName": "portfolio",
+       "msg": {
+        "source": "digital-options",
+        "status": "open",
+        "external_id": 777,
+        "raw_event": {
+         "order_ids": [
+          555
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.place-digital-option\", \"version\": \"2.0\", \"body\": {\"user_balance_id\": 10004, \"instrument_id\": \"do76A20261009D123500T5MPSPT\", \"instrument_index\": 0, \"amount\": \"1.5\", \"asset_id\": 76}}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    777
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_digital_spot_rejected",
+   "csharp": {
+    "method": "BuyDigitalSpotAsync",
+    "args": {
+     "asset": "EURUSD",
+     "amount": 1,
+     "direction": "call",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.place-digital-option",
+     "reply": [
+      {
+       "name": "digital-option-placed",
+       "request_id": "$RID",
+       "msg": {
+        "message": "fail"
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.place-digital-option\", \"version\": \"2.0\", \"body\": {\"user_balance_id\": 10004, \"instrument_id\": \"do1861A20261009D123100T1MCSPT\", \"instrument_index\": 0, \"amount\": \"1\", \"asset_id\": 1861}}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    false,
+    {
+     "name": "digital-option-placed",
+     "request_id": "2",
+     "msg": {
+      "message": "fail"
+     }
+    }
+   ],
+   "compare_result": false
+  },
+  {
+   "name": "buy_digital",
+   "csharp": {
+    "method": "BuyDigitalAsync",
+    "args": {
+     "amount": 1,
+     "instrumentId": "do1861A20261009D123400T1MCSPT"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.place-digital-option",
+     "reply": [
+      {
+       "name": "digital-option-placed",
+       "request_id": "$RID",
+       "msg": {
+        "id": 556
+       }
+      },
+      {
+       "name": "order-changed",
+       "microserviceName": "portfolio",
+       "msg": {
+        "source": "digital-options",
+        "raw_event": {
+         "position_id": 778,
+         "id": 556
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.place-digital-option\", \"version\": \"2.0\", \"body\": {\"user_balance_id\": 10004, \"instrument_id\": \"do1861A20261009D123400T1MCSPT\", \"instrument_index\": 0, \"amount\": \"1\", \"asset_id\": 1861}}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    {
+     "name": "order-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "raw_event": {
+       "position_id": 778,
+       "id": 556
+      }
+     }
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "close_digital_option",
+   "csharp": {
+    "method": "CloseDigitalOptionAsync",
+    "args": {
+     "id": 777
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.close-position",
+     "reply": [
+      {
+       "name": "result",
+       "request_id": "$RID",
+       "msg": {
+        "success": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.close-position\", \"version\": \"1.0\", \"body\": {\"position_id\": 777}}, \"request_id\": \"2\"}"
+   ],
+   "result": true,
+   "compare_result": true
+  },
+  {
+   "name": "close_digital_option_batch",
+   "csharp": {
+    "method": "CloseDigitalOptionBatchAsync",
+    "args": {
+     "ids": [
+      777,
+      778
+     ]
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.close-position-batch",
+     "reply": [
+      {
+       "name": "result",
+       "request_id": "$RID",
+       "msg": {
+        "success": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.close-position-batch\", \"version\": \"1.0\", \"body\": {\"position_ids\": [777, 778]}}, \"request_id\": \"2\"}"
+   ],
+   "result": true,
+   "compare_result": true
+  },
+  {
+   "name": "check_win_digital",
+   "csharp": {
+    "method": "CheckWinDigitalAsync",
+    "args": {
+     "id": 555
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "closed",
+      "close_reason": "expired",
+      "close_profit": 1.9,
+      "invest": 1,
+      "pnl_realized": 0.9,
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ]
+      }
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": [
+    true,
+    0.8999999999999999
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_strike_list",
+   "csharp": {
+    "method": "GetStrikeListAsync",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-strike-list",
+     "reply": [
+      {
+       "name": "strike-list",
+       "request_id": "",
+       "msg": {
+        "strike": [
+         {
+          "value": "1170000",
+          "call": {
+           "id": "C1"
+          },
+          "put": {
+           "id": "P1"
+          }
+         },
+         {
+          "value": 1171000,
+          "call": {
+           "id": "C2"
+          },
+          "put": {
+           "id": "P2"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-strike-list\", \"body\": {\"type\": \"digital-option\", \"underlying\": \"EURUSD\", \"expiration\": 1791549060000, \"period\": 60}, \"version\": \"4.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    {
+     "name": "strike-list",
+     "request_id": "",
+     "msg": {
+      "strike": [
+       {
+        "value": "1170000",
+        "call": {
+         "id": "C1"
+        },
+        "put": {
+         "id": "P1"
+        }
+       },
+       {
+        "value": 1171000,
+        "call": {
+         "id": "C2"
+        },
+        "put": {
+         "id": "P2"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "1.170000": {
+      "call": "C1",
+      "put": "P1"
+     },
+     "1.171000": {
+      "call": "C2",
+      "put": "P2"
+     }
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "subscribe_strike_list",
+   "csharp": {
+    "method": "SubscribeStrikeListAsync",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"price-splitter.client-price-generated\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\", \"expiration_period\": 60, \"asset_id\": 1861}}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "unsubscribe_strike_list",
+   "csharp": {
+    "method": "UnsubscribeStrikeListAsync",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"price-splitter.client-price-generated\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\", \"asset_id\": 1861}}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "get_realtime_strike_list",
+   "csharp": {
+    "method": "GetRealtimeStrikeListAsync",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "client-price-generated",
+     "msg": {
+      "asset_id": 1861,
+      "prices": [
+       {
+        "strike": "SPT",
+        "call": {
+         "symbol": "do1861A20261009D123300T1MCSPT",
+         "ask": 52.5,
+         "bid": 47.5
+        },
+        "put": {
+         "symbol": "do1861A20261009D123300T1MPSPT",
+         "ask": 48.0,
+         "bid": 51.0
+        }
+       },
+       {
+        "strike": "1170000",
+        "call": {
+         "symbol": "C1",
+         "ask": 60,
+         "bid": 47
+        },
+        "put": {
+         "symbol": "P1",
+         "ask": 41,
+         "bid": 50
+        }
+       },
+       {
+        "strike": "1171000",
+        "call": {
+         "symbol": "C2",
+         "ask": 55,
+         "bid": 40
+        },
+        "put": {
+         "symbol": "P2",
+         "bid": 55
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "SPT": {
+     "call": {
+      "id": "do1861A20261009D123300T1MCSPT",
+      "profit": 90.47619047619048
+     },
+     "put": {
+      "id": "do1861A20261009D123300T1MPSPT",
+      "profit": 108.33333333333333
+     }
+    },
+    "1170000": {
+     "call": {
+      "id": "C1",
+      "profit": 66.66666666666667
+     },
+     "put": {
+      "id": "P1",
+      "profit": 143.90243902439025
+     }
+    },
+    "1171000": {
+     "call": {
+      "id": "C2",
+      "profit": 81.81818181818181
+     },
+     "put": {
+      "id": "P2",
+      "profit": null
+     }
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_instrument_quotes",
+   "csharp": {
+    "method": "GetInstrumentQuotesGeneratedDataAsync",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "client-price-generated",
+     "msg": {
+      "asset_id": 1861,
+      "prices": [
+       {
+        "strike": "SPT",
+        "call": {
+         "symbol": "do1861A20261009D123300T1MCSPT",
+         "ask": 52.5,
+         "bid": 47.5
+        },
+        "put": {
+         "symbol": "do1861A20261009D123300T1MPSPT",
+         "ask": 48.0,
+         "bid": 51.0
+        }
+       },
+       {
+        "strike": "1170000",
+        "call": {
+         "symbol": "C1",
+         "ask": 60,
+         "bid": 47
+        },
+        "put": {
+         "symbol": "P1",
+         "ask": 41,
+         "bid": 50
+        }
+       },
+       {
+        "strike": "1171000",
+        "call": {
+         "symbol": "C2",
+         "ask": 55,
+         "bid": 40
+        },
+        "put": {
+         "symbol": "P2",
+         "bid": 55
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "name": "client-price-generated",
+    "msg": {
+     "asset_id": 1861,
+     "prices": [
+      {
+       "strike": "SPT",
+       "call": {
+        "symbol": "do1861A20261009D123300T1MCSPT",
+        "ask": 52.5,
+        "bid": 47.5
+       },
+       "put": {
+        "symbol": "do1861A20261009D123300T1MPSPT",
+        "ask": 48.0,
+        "bid": 51.0
+       }
+      },
+      {
+       "strike": "1170000",
+       "call": {
+        "symbol": "C1",
+        "ask": 60,
+        "bid": 47
+       },
+       "put": {
+        "symbol": "P1",
+        "ask": 41,
+        "bid": 50
+       }
+      },
+      {
+       "strike": "1171000",
+       "call": {
+        "symbol": "C2",
+        "ask": 55,
+        "bid": 40
+       },
+       "put": {
+        "symbol": "P2",
+        "bid": 55
+       }
+      }
+     ]
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_digital_current_profit",
+   "csharp": {
+    "method": "GetDigitalCurrentProfit",
+    "args": {
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "client-price-generated",
+     "msg": {
+      "asset_id": 1861,
+      "prices": [
+       {
+        "strike": "SPT",
+        "call": {
+         "symbol": "do1861A20261009D123300T1MCSPT",
+         "ask": 52.5,
+         "bid": 47.5
+        },
+        "put": {
+         "symbol": "do1861A20261009D123300T1MPSPT",
+         "ask": 48.0,
+         "bid": 51.0
+        }
+       },
+       {
+        "strike": "1170000",
+        "call": {
+         "symbol": "C1",
+         "ask": 60,
+         "bid": 47
+        },
+        "put": {
+         "symbol": "P1",
+         "ask": 41,
+         "bid": 50
+        }
+       },
+       {
+        "strike": "1171000",
+        "call": {
+         "symbol": "C2",
+         "ask": 55,
+         "bid": 40
+        },
+        "put": {
+         "symbol": "P2",
+         "bid": 55
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": 90.47619047619048,
+   "compare_result": true
+  },
+  {
+   "name": "get_digital_spot_profit_after_sale",
+   "csharp": {
+    "method": "GetDigitalSpotProfitAfterSaleAsync",
+    "args": {
+     "id": 777
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ],
+       "instrument_id": "do1861A20261009D123300T1MCSPT",
+       "instrument_underlying": "EURUSD",
+       "buy_amount": 1,
+       "sell_amount": 0,
+       "instrument_period": 60,
+       "count": 1.9,
+       "instrument_strike_value": 1170500,
+       "currency_rate": 1,
+       "extra_data": {
+        "lower_instrument_strike": 1170000,
+        "upper_instrument_strike": 1171000,
+        "lower_instrument_id": "C1",
+        "upper_instrument_id": "C2"
+       }
+      }
+     }
+    },
+    {
+     "name": "client-price-generated",
+     "msg": {
+      "asset_id": 1861,
+      "prices": [
+       {
+        "strike": "SPT",
+        "call": {
+         "symbol": "do1861A20261009D123300T1MCSPT",
+         "ask": 52.5,
+         "bid": 47.5
+        },
+        "put": {
+         "symbol": "do1861A20261009D123300T1MPSPT",
+         "ask": 48.0,
+         "bid": 51.0
+        }
+       },
+       {
+        "strike": "1170000",
+        "call": {
+         "symbol": "C1",
+         "ask": 60,
+         "bid": 47
+        },
+        "put": {
+         "symbol": "P1",
+         "ask": 41,
+         "bid": 50
+        }
+       },
+       {
+        "strike": "1171000",
+        "call": {
+         "symbol": "C2",
+         "ask": 55,
+         "bid": 40
+        },
+        "put": {
+         "symbol": "P2",
+         "bid": 55
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": 81.64999999999853,
+   "compare_result": true
+  },
+  {
+   "name": "get_digital_position_by_position_id",
+   "csharp": {
+    "method": "GetDigitalPositionByPositionIdAsync",
+    "args": {
+     "id": 777
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.get-position",
+     "reply": [
+      {
+       "name": "position",
+       "request_id": "",
+       "msg": {
+        "position": {
+         "id": 777,
+         "status": "open"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.get-position\", \"body\": {\"position_id\": 777}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "name": "position",
+    "request_id": "",
+    "msg": {
+     "position": {
+      "id": 777,
+      "status": "open"
+     }
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_digital_position",
+   "csharp": {
+    "method": "GetDigitalPositionAsync",
+    "args": {
+     "id": 555
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ],
+       "instrument_id": "do1861A20261009D123300T1MCSPT",
+       "instrument_underlying": "EURUSD",
+       "buy_amount": 1,
+       "sell_amount": 0,
+       "instrument_period": 60,
+       "count": 1.9,
+       "instrument_strike_value": 1170500,
+       "currency_rate": 1,
+       "extra_data": {
+        "lower_instrument_strike": 1170000,
+        "upper_instrument_strike": 1171000,
+        "lower_instrument_id": "C1",
+        "upper_instrument_id": "C2"
+       }
+      }
+     }
+    }
+   ],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.get-position",
+     "reply": [
+      {
+       "name": "position",
+       "request_id": "",
+       "msg": {
+        "position": {
+         "id": 777,
+         "status": "open"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.get-position\", \"body\": {\"position_id\": 777}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "name": "position",
+    "request_id": "",
+    "msg": {
+     "position": {
+      "id": 777,
+      "status": "open"
+     }
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "digital_open_by_other_pc",
+   "csharp": {
+    "method": "GetDigitalOpenByOtherPc",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ],
+       "instrument_id": "do1861A20261009D123300T1MCSPT",
+       "instrument_underlying": "EURUSD",
+       "buy_amount": 1,
+       "sell_amount": 0,
+       "instrument_period": 60,
+       "count": 1.9,
+       "instrument_strike_value": 1170500,
+       "currency_rate": 1,
+       "extra_data": {
+        "lower_instrument_strike": 1170000,
+        "upper_instrument_strike": 1171000,
+        "lower_instrument_id": "C1",
+        "upper_instrument_id": "C2"
+       }
+      }
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "777": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ],
+       "instrument_id": "do1861A20261009D123300T1MCSPT",
+       "instrument_underlying": "EURUSD",
+       "buy_amount": 1,
+       "sell_amount": 0,
+       "instrument_period": 60,
+       "count": 1.9,
+       "instrument_strike_value": 1170500,
+       "currency_rate": 1,
+       "extra_data": {
+        "lower_instrument_strike": 1170000,
+        "upper_instrument_strike": 1171000,
+        "lower_instrument_id": "C1",
+        "upper_instrument_id": "C2"
+       }
+      }
+     }
+    }
+   },
+   "compare_result": true
   }
  ]
 }
