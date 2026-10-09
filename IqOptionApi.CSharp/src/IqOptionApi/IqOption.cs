@@ -883,5 +883,183 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Candles & live prices
+
+    private static void CheckSize(int size)
+    {
+        if (!CandleSizes.Contains(size)) throw new ArgumentOutOfRangeException(nameof(size), size, "Use one of IqOption.CandleSizes.");
+    }
+
+    /// <summary>Historic candles ending at <paramref name="endTime"/> (Python <c>get_candles</c>).</summary>
+    /// <param name="asset">Asset name, e.g. "EURUSD".</param>
+    /// <param name="intervalSeconds">Candle size in seconds.</param>
+    /// <param name="count">How many candles.</param>
+    /// <param name="endTime">End time (Unix seconds), e.g. <see cref="GetServerTimestamp"/>.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<List<Candle>> GetCandlesAsync(string asset, int intervalSeconds, int count, double endTime, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        int id = Act(asset);
+        var r = await ByName("candles", new Obj
+        {
+            ["name"] = "get-candles",
+            ["version"] = "2.0",
+            ["body"] = new Obj { ["active_id"] = id, ["size"] = intervalSeconds, ["to"] = (long)endTime, ["count"] = count, [""] = id },
+        }, "", ct).ConfigureAwait(false);
+        return J.Arr(Path(r, "msg", "candles")).Select(n => Candle.FromJson(J.Obj(n))).ToList();
+    }
+
+    /// <summary>Loads <paramref name="maxDict"/> candles and streams new ones, keeping the newest <paramref name="maxDict"/> (Python <c>start_candles_stream</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="size">Candle size, one of <see cref="CandleSizes"/>.</param>
+    /// <param name="maxDict">How many candles to keep.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>True when the first live candle arrived within 20 s.</returns>
+    public async Task<bool> StartCandlesStreamAsync(string asset, int size, int maxDict, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        CheckSize(size);
+        lock (_s.Lock) State.GetOrAdd(_s.MaxDict, asset)[size] = maxDict;
+        await SeedCandlesAsync(asset, size, maxDict, ct).ConfigureAwait(false);
+        lock (_track)
+        {
+            if (!_candleStreams.Contains((asset, size))) _candleStreams.Add((asset, size));
+        }
+        lock (_s.Lock) State.GetOrAdd(_s.CandleCheck, asset)[size] = false;
+        return await SubscribeUntilDataAsync(CandleStreamMsg(asset, size), () => CandleCheck(asset, size), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Same as <see cref="StartCandlesStreamAsync"/> for all sizes at once (Python <c>start_candles_stream(asset, "all", maxdict)</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="maxDict">How many candles to keep per size.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> StartAllCandlesStreamsAsync(string asset, int maxDict, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        foreach (int size in CandleSizes)
+        {
+            await SeedCandlesAsync(asset, size, maxDict, ct).ConfigureAwait(false);
+            lock (_s.Lock) State.GetOrAdd(_s.MaxDict, asset)[size] = maxDict;
+        }
+        lock (_s.Lock) _s.AllSizeCheck[asset] = false;
+        lock (_track)
+        {
+            if (!_allSizeStreams.Contains(asset)) _allSizeStreams.Add(asset);
+        }
+        return await SubscribeUntilDataAsync(AllSizesMsg(asset), () => AllSizeCheck(asset), ct).ConfigureAwait(false);
+    }
+
+    private async Task SeedCandlesAsync(string asset, int size, int maxDict, CancellationToken ct)
+    {
+        var candles = await GetCandlesAsync(asset, size, maxDict, Now, ct).ConfigureAwait(false);
+        lock (_s.Lock)
+        {
+            var buffer = _s.CandleBuffer(asset, size);
+            foreach (var c in candles) buffer[c.From] = c;
+        }
+    }
+
+    private bool CandleCheck(string asset, int size)
+    {
+        lock (_s.Lock) return _s.CandleCheck.TryGetValue(asset, out var d) && d.TryGetValue(size, out bool v) && v;
+    }
+
+    private bool AllSizeCheck(string asset)
+    {
+        lock (_s.Lock) return _s.AllSizeCheck.TryGetValue(asset, out bool v) && v;
+    }
+
+    /// <summary>Python stream start: subscribe again every second until data arrives, for up to 20 s.</summary>
+    private async Task<bool> SubscribeUntilDataAsync(object msg, Func<bool> hasData, CancellationToken ct)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            if (clock.Elapsed > TimeSpan.FromSeconds(20))
+            {
+                Log("stream did not start within 20 s");
+                return false;
+            }
+            if (hasData()) return true;
+            await Send("subscribeMessage", msg, "", ct).ConfigureAwait(false);
+            await WaitCondAsync(hasData, Scaled(1), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Python stream stop: unsubscribe again until one second passes without data.</summary>
+    private async Task UnsubscribeUntilQuietAsync(object msg, Func<bool> gotData, Action reset, CancellationToken ct)
+    {
+        var clock = Stopwatch.StartNew();
+        while (gotData() && clock.Elapsed < T)
+        {
+            reset();
+            await Send("unsubscribeMessage", msg, "", ct).ConfigureAwait(false);
+            await Task.Delay(Scaled(1), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Stops one candle stream (Python <c>stop_candles_stream(asset, size)</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="size">Candle size.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task StopCandlesStreamAsync(string asset, int size, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        CheckSize(size);
+        lock (_track) _candleStreams.Remove((asset, size));
+        await UnsubscribeUntilQuietAsync(CandleStreamMsg(asset, size), () => CandleCheck(asset, size),
+            () => { lock (_s.Lock) State.GetOrAdd(_s.CandleCheck, asset)[size] = false; }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops the all-sizes stream (Python <c>stop_candles_stream(asset, "all")</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task StopAllCandlesStreamsAsync(string asset, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _allSizeStreams.Remove(asset);
+        await UnsubscribeUntilQuietAsync(AllSizesMsg(asset), () => AllSizeCheck(asset),
+            () => { lock (_s.Lock) _s.AllSizeCheck[asset] = false; }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stored live candles of one size, keyed by start time (Python <c>get_realtime_candles</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="size">Candle size.</param>
+    public IReadOnlyDictionary<long, Candle> GetRealtimeCandles(string asset, int size)
+    {
+        CheckSize(size);
+        lock (_s.Lock)
+        {
+            return _s.Candles.TryGetValue(asset, out var bySize) && bySize.TryGetValue(size, out var buffer)
+                ? new SortedDictionary<long, Candle>(buffer)
+                : new SortedDictionary<long, Candle>();
+        }
+    }
+
+    /// <summary>Stored live candles of every size (Python <c>get_realtime_candles(asset, "all")</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    public IReadOnlyDictionary<int, IReadOnlyDictionary<long, Candle>> GetRealtimeCandles(string asset)
+    {
+        lock (_s.Lock)
+        {
+            var result = new SortedDictionary<int, IReadOnlyDictionary<long, Candle>>();
+            if (_s.Candles.TryGetValue(asset, out var bySize))
+            {
+                foreach (var (size, buffer) in bySize) result[size] = new SortedDictionary<long, Candle>(buffer);
+            }
+            return result;
+        }
+    }
+
+    /// <summary>All stored live candles (Python <c>get_all_realtime_candles</c>).</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<int, IReadOnlyDictionary<long, Candle>>> GetAllRealtimeCandles()
+    {
+        string[] assets;
+        lock (_s.Lock) assets = _s.Candles.Keys.ToArray();
+        return assets.ToDictionary(a => a, a => GetRealtimeCandles(a));
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }

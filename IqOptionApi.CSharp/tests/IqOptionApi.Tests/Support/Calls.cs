@@ -48,6 +48,19 @@ internal static class Calls
             case "GetTopAssetAsync": return await api.GetTopAssetAsync(S(a, "type"));
             case "OpcodeToName": return api.OpcodeToName(I(a, "activeId"));
 
+            case "GetCandlesAsync":
+                return new JsonArray((await api.GetCandlesAsync(S(a, "asset"), I(a, "interval"), I(a, "count"), D(a, "endTime")))
+                    .Select(c => (JsonNode?)c.Raw.DeepClone()).ToArray());
+            case "StartCandlesStreamAsync":
+                await api.StartCandlesStreamAsync(S(a, "asset"), I(a, "size"), I(a, "maxDict"));
+                return CandleMap(api.GetRealtimeCandles(S(a, "asset"), I(a, "size")));
+            case "StartAllCandlesStreamsAsync":
+                await api.StartAllCandlesStreamsAsync(S(a, "asset"), I(a, "maxDict"));
+                return new JsonObject(api.GetRealtimeCandles(S(a, "asset"))
+                    .Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)CandleMap(x.Value))));
+            case "StopCandlesStreamAsync": await api.StopCandlesStreamAsync(S(a, "asset"), I(a, "size")); return null;
+            case "StopAllCandlesStreamsAsync": await api.StopAllCandlesStreamsAsync(S(a, "asset")); return null;
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);
@@ -108,6 +121,9 @@ internal static class Calls
 
     internal static JsonObject Nested(Dictionary<string, Dictionary<string, double>> d) =>
         new(d.Select(x => KeyValuePair.Create(x.Key, (JsonNode?)new JsonObject(x.Value.Select(y => KeyValuePair.Create(y.Key, (JsonNode?)y.Value))))));
+
+    internal static JsonObject CandleMap(IReadOnlyDictionary<long, Candle> d) =>
+        new(d.Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value.Raw.DeepClone())));
 
     internal static JsonArray Items(IEnumerable<KeyValuePair<string, int>> items) =>
         new(items.Select(p => (JsonNode?)new JsonArray(p.Key, p.Value)).ToArray());

@@ -495,6 +495,34 @@ def build_cases():
          "csharp": {"method": "GetTopAssetAsync", "args": {"type": "forex"}}},
         {"name": "opcode_to_name", "call": lambda iq: iq.opcode_to_name(76), "csharp": {"method": "OpcodeToName", "args": {"activeId": 76}}},
     ]
+    CANDLES = {"name": "candles", "request_id": "", "msg": {"candles": [
+        {"id": 1, "from": T - 120, "at": 1, "to": T - 60, "open": 1.1, "close": 1.2, "min": 1.0, "max": 1.3, "volume": 0},
+        {"id": 2, "from": T - 60, "at": 2, "to": T, "open": 1.2, "close": 1.25, "min": 1.1, "max": 1.3, "volume": 0}]}}
+    CANDLES_RULE = {"on": "sendMessage:get-candles", "reply": [CANDLES]}
+    LIVE_CANDLE = {"name": "candle-generated", "msg": {"active_id": 1861, "size": 60, "from": T, "to": T + 60, "id": 3,
+                                                       "open": 1.25, "close": 1.26, "min": 1.25, "max": 1.27, "volume": 0, "at": 3}}
+    ALL_SIZES = {"name": "candles-generated", "msg": {"active_id": 1861, "at": 4, "ask": 1.27, "bid": 1.26, "value": 1.265, "candles": {
+        "1": {"id": 21, "from": T, "to": T + 1, "open": 1.26, "min": 1.26, "max": 1.27, "volume": 1},
+        "60": {"id": 22, "from": T, "to": T + 60, "open": 1.25, "min": 1.25, "max": 1.27, "volume": 2}}}}
+    cases += [
+        {"name": "get_candles", "call": lambda iq: iq.get_candles("EURUSD", 60, 2, T + 0.9), "rules": [CANDLES_RULE],
+         "csharp": {"method": "GetCandlesAsync", "args": {"asset": "EURUSD", "interval": 60, "count": 2, "endTime": T + 0.9}}},
+        {"name": "start_candles_stream",
+         "call": lambda iq: (iq.start_candles_stream("EURUSD", 60, 2), iq.get_realtime_candles("EURUSD", 60))[1],
+         "rules": [CANDLES_RULE, {"on": "subscribeMessage:candle-generated", "reply": [LIVE_CANDLE]}],
+         "csharp": {"method": "StartCandlesStreamAsync", "args": {"asset": "EURUSD", "size": 60, "maxDict": 2}}},
+        {"name": "start_all_candles_streams",
+         "call": lambda iq: (iq.start_candles_stream("EURUSD", "all", 2), iq.get_realtime_candles("EURUSD", "all"))[1],
+         "rules": [CANDLES_RULE, {"on": "subscribeMessage:candles-generated", "reply": [ALL_SIZES]}],
+         "csharp": {"method": "StartAllCandlesStreamsAsync", "args": {"asset": "EURUSD", "maxDict": 2}}},
+        {"name": "stop_candles_stream", "setup": lambda iq, api: api.candle_generated_check["EURUSD"].__setitem__(60, True),
+         "setup_csharp": "candle_check:EURUSD:60", "call": lambda iq: iq.stop_candles_stream("EURUSD", 60),
+         "csharp": {"method": "StopCandlesStreamAsync", "args": {"asset": "EURUSD", "size": 60}}},
+        {"name": "stop_all_candles_streams",
+         "setup": lambda iq, api: api.candle_generated_all_size_check.__setitem__("EURUSD", True),
+         "setup_csharp": "all_size_check:EURUSD", "call": lambda iq: iq.stop_candles_stream("EURUSD", "all"),
+         "csharp": {"method": "StopAllCandlesStreamsAsync", "args": {"asset": "EURUSD"}}},
+    ]
     # @@CASES@@
     return cases
 

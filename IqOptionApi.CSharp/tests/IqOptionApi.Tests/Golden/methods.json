@@ -4968,6 +4968,795 @@
    "frames": [],
    "result": "EURUSD-OTC",
    "compare_result": true
+  },
+  {
+   "name": "get_candles",
+   "csharp": {
+    "method": "GetCandlesAsync",
+    "args": {
+     "asset": "EURUSD",
+     "interval": 60,
+     "count": 2,
+     "endTime": 1791549020.9
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-candles",
+     "reply": [
+      {
+       "name": "candles",
+       "request_id": "",
+       "msg": {
+        "candles": [
+         {
+          "id": 1,
+          "from": 1791548900,
+          "at": 1,
+          "to": 1791548960,
+          "open": 1.1,
+          "close": 1.2,
+          "min": 1.0,
+          "max": 1.3,
+          "volume": 0
+         },
+         {
+          "id": 2,
+          "from": 1791548960,
+          "at": 2,
+          "to": 1791549020,
+          "open": 1.2,
+          "close": 1.25,
+          "min": 1.1,
+          "max": 1.3,
+          "volume": 0
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 60, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    {
+     "id": 1,
+     "from": 1791548900,
+     "at": 1,
+     "to": 1791548960,
+     "open": 1.1,
+     "close": 1.2,
+     "min": 1.0,
+     "max": 1.3,
+     "volume": 0
+    },
+    {
+     "id": 2,
+     "from": 1791548960,
+     "at": 2,
+     "to": 1791549020,
+     "open": 1.2,
+     "close": 1.25,
+     "min": 1.1,
+     "max": 1.3,
+     "volume": 0
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "start_candles_stream",
+   "csharp": {
+    "method": "StartCandlesStreamAsync",
+    "args": {
+     "asset": "EURUSD",
+     "size": 60,
+     "maxDict": 2
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-candles",
+     "reply": [
+      {
+       "name": "candles",
+       "request_id": "",
+       "msg": {
+        "candles": [
+         {
+          "id": 1,
+          "from": 1791548900,
+          "at": 1,
+          "to": 1791548960,
+          "open": 1.1,
+          "close": 1.2,
+          "min": 1.0,
+          "max": 1.3,
+          "volume": 0
+         },
+         {
+          "id": 2,
+          "from": 1791548960,
+          "at": 2,
+          "to": 1791549020,
+          "open": 1.2,
+          "close": 1.25,
+          "min": 1.1,
+          "max": 1.3,
+          "volume": 0
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "on": "subscribeMessage:candle-generated",
+     "reply": [
+      {
+       "name": "candle-generated",
+       "msg": {
+        "active_id": 1861,
+        "size": 60,
+        "from": 1791549020,
+        "to": 1791549080,
+        "id": 3,
+        "open": 1.25,
+        "close": 1.26,
+        "min": 1.25,
+        "max": 1.27,
+        "volume": 0,
+        "at": 3
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 60, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"candle-generated\", \"params\": {\"routingFilters\": {\"active_id\": \"1861\", \"size\": 60}}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "1791548960": {
+     "id": 2,
+     "from": 1791548960,
+     "at": 2,
+     "to": 1791549020,
+     "open": 1.2,
+     "close": 1.25,
+     "min": 1.1,
+     "max": 1.3,
+     "volume": 0
+    },
+    "1791549020": {
+     "active_id": 1861,
+     "size": 60,
+     "from": 1791549020,
+     "to": 1791549080,
+     "id": 3,
+     "open": 1.25,
+     "close": 1.26,
+     "min": 1.25,
+     "max": 1.27,
+     "volume": 0,
+     "at": 3
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "start_all_candles_streams",
+   "csharp": {
+    "method": "StartAllCandlesStreamsAsync",
+    "args": {
+     "asset": "EURUSD",
+     "maxDict": 2
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-candles",
+     "reply": [
+      {
+       "name": "candles",
+       "request_id": "",
+       "msg": {
+        "candles": [
+         {
+          "id": 1,
+          "from": 1791548900,
+          "at": 1,
+          "to": 1791548960,
+          "open": 1.1,
+          "close": 1.2,
+          "min": 1.0,
+          "max": 1.3,
+          "volume": 0
+         },
+         {
+          "id": 2,
+          "from": 1791548960,
+          "at": 2,
+          "to": 1791549020,
+          "open": 1.2,
+          "close": 1.25,
+          "min": 1.1,
+          "max": 1.3,
+          "volume": 0
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "on": "subscribeMessage:candles-generated",
+     "reply": [
+      {
+       "name": "candles-generated",
+       "msg": {
+        "active_id": 1861,
+        "at": 4,
+        "ask": 1.27,
+        "bid": 1.26,
+        "value": 1.265,
+        "candles": {
+         "1": {
+          "id": 21,
+          "from": 1791549020,
+          "to": 1791549021,
+          "open": 1.26,
+          "min": 1.26,
+          "max": 1.27,
+          "volume": 1
+         },
+         "60": {
+          "id": 22,
+          "from": 1791549020,
+          "to": 1791549080,
+          "open": 1.25,
+          "min": 1.25,
+          "max": 1.27,
+          "volume": 2
+         }
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 1, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 5, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 10, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 15, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 30, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 60, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 120, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 300, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 600, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 900, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 1800, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 3600, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 7200, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 14400, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 28800, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 43200, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 86400, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 604800, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-candles\", \"version\": \"2.0\", \"body\": {\"active_id\": 1861, \"size\": 2592000, \"to\": 1791549020, \"count\": 2, \"\": 1861}}, \"request_id\": \"\"}",
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"candles-generated\", \"params\": {\"routingFilters\": {\"active_id\": \"1861\"}}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "1": {
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791549020": {
+      "id": 21,
+      "from": 1791549020,
+      "to": 1791549021,
+      "open": 1.26,
+      "min": 1.26,
+      "max": 1.27,
+      "volume": 1,
+      "active_id": 1861,
+      "at": 4,
+      "ask": 1.27,
+      "bid": 1.26,
+      "close": 1.265,
+      "size": 1
+     }
+    },
+    "5": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "10": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "15": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "30": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "60": {
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791549020": {
+      "id": 22,
+      "from": 1791549020,
+      "to": 1791549080,
+      "open": 1.25,
+      "min": 1.25,
+      "max": 1.27,
+      "volume": 2,
+      "active_id": 1861,
+      "at": 4,
+      "ask": 1.27,
+      "bid": 1.26,
+      "close": 1.265,
+      "size": 60
+     }
+    },
+    "120": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "300": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "600": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "900": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "1800": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "3600": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "7200": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "14400": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "28800": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "43200": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "86400": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "604800": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    },
+    "2592000": {
+     "1791548900": {
+      "id": 1,
+      "from": 1791548900,
+      "at": 1,
+      "to": 1791548960,
+      "open": 1.1,
+      "close": 1.2,
+      "min": 1.0,
+      "max": 1.3,
+      "volume": 0
+     },
+     "1791548960": {
+      "id": 2,
+      "from": 1791548960,
+      "at": 2,
+      "to": 1791549020,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0
+     }
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "stop_candles_stream",
+   "csharp": {
+    "method": "StopCandlesStreamAsync",
+    "args": {
+     "asset": "EURUSD",
+     "size": 60
+    }
+   },
+   "setup_csharp": "candle_check:EURUSD:60",
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"candle-generated\", \"params\": {\"routingFilters\": {\"active_id\": \"1861\", \"size\": 60}}}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "stop_all_candles_streams",
+   "csharp": {
+    "method": "StopAllCandlesStreamsAsync",
+    "args": {
+     "asset": "EURUSD"
+    }
+   },
+   "setup_csharp": "all_size_check:EURUSD",
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"candles-generated\", \"params\": {\"routingFilters\": {\"active_id\": \"1861\"}}}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
   }
  ]
 }
