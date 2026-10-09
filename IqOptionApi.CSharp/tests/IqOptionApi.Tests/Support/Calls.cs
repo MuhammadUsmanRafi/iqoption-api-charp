@@ -16,6 +16,19 @@ internal static class Calls
                 await api.Conn.WaitUntilAsync(() => { lock (socket.Frames) return socket.Frames.Count > 0; }, TimeSpan.FromSeconds(5), default);
                 return null;
             }
+            case "GetProfileAsync": return await api.GetProfileAsync();
+            case "GetBalancesAsync": return await api.GetBalancesAsync();
+            case "GetBalanceAsync": return ToNode(await api.GetBalanceAsync());
+            case "GetBalanceId": return ToNode(api.GetBalanceId());
+            case "GetBalanceModeAsync":
+                return (await api.GetBalanceModeAsync()) switch { BalanceMode.Real => "REAL", BalanceMode.Practice => "PRACTICE", _ => null };
+            case "GetBalanceIdByModeAsync": return ToNode(await api.GetBalanceIdByModeAsync(Mode(a)));
+            case "ChangeBalanceAsync": await api.ChangeBalanceAsync(Mode(a)); return ToNode(api.GetBalanceId());
+            case "GetCurrencyAsync": return await api.GetCurrencyAsync();
+            case "ResetPracticeBalanceAsync": return await api.ResetPracticeBalanceAsync();
+            case "GetTransactionsAsync":
+                return await api.GetTransactionsAsync(L(a, "from"), L(a, "to"), I(a, "limit"), I(a, "offset"), Strings(a, "types"));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);

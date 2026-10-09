@@ -41,12 +41,10 @@ public class ConnectGoldenTests
         Assert.Equal("{\"code\":\"invalid_credentials\"}", reason);
     }
 
-#if TASK8
     [Fact]
     public async Task CallsBeforeConnect_Throw()
     {
         await using var api = new IqOption("a", "b");
         await Assert.ThrowsAsync<InvalidOperationException>(() => api.GetProfileAsync());
     }
-#endif
 }

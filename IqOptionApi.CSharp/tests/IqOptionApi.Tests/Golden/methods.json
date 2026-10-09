@@ -54,6 +54,412 @@
    ],
    "result": null,
    "compare_result": false
+  },
+  {
+   "name": "get_profile",
+   "csharp": {
+    "method": "GetProfileAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-profile",
+     "reply": [
+      {
+       "name": "profile",
+       "request_id": "$RID",
+       "msg": {
+        "user_id": 777,
+        "name": "Test User",
+        "currency": "USD",
+        "balance_id": 10004
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-profile\", \"version\": \"1.0\", \"body\": {}}, \"request_id\": \"2\"}"
+   ],
+   "result": {
+    "user_id": 777,
+    "name": "Test User",
+    "currency": "USD",
+    "balance_id": 10004
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_balances",
+   "csharp": {
+    "method": "GetBalancesAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "name": "balances",
+    "request_id": "",
+    "msg": [
+     {
+      "id": 10001,
+      "type": 1,
+      "amount": 0,
+      "currency": "USD"
+     },
+     {
+      "id": 10004,
+      "type": 4,
+      "amount": 10000.5,
+      "currency": "USD"
+     }
+    ]
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_balance",
+   "csharp": {
+    "method": "GetBalanceAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": 10000.5,
+   "compare_result": true
+  },
+  {
+   "name": "get_balance_cached",
+   "csharp": {
+    "method": "GetBalanceAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "balance-changed",
+     "msg": {
+      "current_balance": {
+       "id": 10004,
+       "amount": 77.5
+      }
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": 77.5,
+   "compare_result": true
+  },
+  {
+   "name": "get_balance_id",
+   "csharp": {
+    "method": "GetBalanceId",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [],
+   "result": 10004,
+   "compare_result": true
+  },
+  {
+   "name": "get_balance_mode",
+   "csharp": {
+    "method": "GetBalanceModeAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": "PRACTICE",
+   "compare_result": true
+  },
+  {
+   "name": "get_balance_id_by_mode",
+   "csharp": {
+    "method": "GetBalanceIdByModeAsync",
+    "args": {
+     "mode": "REAL"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": 10001,
+   "compare_result": true
+  },
+  {
+   "name": "change_balance",
+   "csharp": {
+    "method": "ChangeBalanceAsync",
+    "args": {
+     "mode": "REAL"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": 10001,
+   "compare_result": true
+  },
+  {
+   "name": "get_currency",
+   "csharp": {
+    "method": "GetCurrencyAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-balances",
+     "reply": [
+      {
+       "name": "balances",
+       "request_id": "$RID",
+       "msg": [
+        {
+         "id": 10001,
+         "type": 1,
+         "amount": 0,
+         "currency": "USD"
+        },
+        {
+         "id": 10004,
+         "type": 4,
+         "amount": 10000.5,
+         "currency": "USD"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": "USD",
+   "compare_result": true
+  },
+  {
+   "name": "reset_practice_balance",
+   "csharp": {
+    "method": "ResetPracticeBalanceAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:reset-training-balance",
+     "reply": [
+      {
+       "name": "training-balance-reset",
+       "request_id": "",
+       "msg": {
+        "isSuccessful": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"reset-training-balance\", \"version\": \"2.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": true,
+   "compare_result": true
+  },
+  {
+   "name": "get_transactions",
+   "csharp": {
+    "method": "GetTransactionsAsync",
+    "args": {
+     "from": 1700000000,
+     "to": 1800000000,
+     "limit": 10,
+     "offset": 0,
+     "types": [
+      "deposit",
+      "order_sell"
+     ]
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-transactions",
+     "reply": [
+      {
+       "name": "transactions",
+       "request_id": "$RID",
+       "msg": {
+        "transactions": [
+         {
+          "id": 1
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-transactions\", \"body\": {\"from\": 1700000000, \"to\": 1800000000, \"limit\": 10, \"offset\": 0, \"types\": [\"deposit\", \"order_sell\"]}}, \"request_id\": \"2\"}"
+   ],
+   "result": {
+    "name": "transactions",
+    "request_id": "2",
+    "msg": {
+     "transactions": [
+      {
+       "id": 1
+      }
+     ]
+    }
+   },
+   "compare_result": true
   }
  ]
 }

@@ -405,6 +405,36 @@ def build_cases():
          "call": lambda iq: iq.api.websocket_client.on_message(None, json.dumps({"name": "heartbeat", "msg": 1791549020123})),
          "csharp": {"method": "Heartbeat", "args": {"heartbeatTime": 1791549020123}}, "compare_result": False},
     ]
+    BAL_RULE = {"on": "sendMessage:get-balances", "reply": [BALANCES]}
+    cases += [
+        {"name": "get_profile", "call": lambda iq: iq.get_profile(),
+         "rules": [{"on": "sendMessage:get-profile", "reply": [PROFILE]}], "csharp": {"method": "GetProfileAsync", "args": {}}},
+        {"name": "get_balances", "call": lambda iq: iq._get_balances(), "rules": [BAL_RULE],
+         "csharp": {"method": "GetBalancesAsync", "args": {}}},
+        {"name": "get_balance", "call": lambda iq: amount_of(iq._get_balances()), "rules": [BAL_RULE],
+         "csharp": {"method": "GetBalanceAsync", "args": {}}},
+        {"name": "get_balance_cached",
+         "pre": [{"name": "balance-changed", "msg": {"current_balance": {"id": PRACTICE_ID, "amount": 77.5}}}],
+         "call": lambda iq: iq.get_balance_v2(), "csharp": {"method": "GetBalanceAsync", "args": {}}},
+        {"name": "get_balance_id", "call": lambda iq: iq.get_balance_id(), "csharp": {"method": "GetBalanceId", "args": {}}},
+        {"name": "get_balance_mode", "call": lambda iq: iq.get_balance_mode(), "rules": [BAL_RULE],
+         "csharp": {"method": "GetBalanceModeAsync", "args": {}}},
+        {"name": "get_balance_id_by_mode", "call": lambda iq: iq.get_balance_id_by_mode("REAL"), "rules": [BAL_RULE],
+         "csharp": {"method": "GetBalanceIdByModeAsync", "args": {"mode": "REAL"}}},
+        {"name": "change_balance", "call": lambda iq: (iq.change_balance("REAL"), iq.get_balance_id())[1], "rules": [BAL_RULE],
+         "csharp": {"method": "ChangeBalanceAsync", "args": {"mode": "REAL"}}},
+        {"name": "get_currency", "call": lambda iq: iq.get_currency(), "rules": [BAL_RULE],
+         "csharp": {"method": "GetCurrencyAsync", "args": {}}},
+        {"name": "reset_practice_balance", "call": lambda iq: iq.reset_practice_balance(),
+         "rules": [{"on": "sendMessage:reset-training-balance",
+                    "reply": [{"name": "training-balance-reset", "request_id": "", "msg": {"isSuccessful": True}}]}],
+         "csharp": {"method": "ResetPracticeBalanceAsync", "args": {}}},
+        {"name": "get_transactions", "call": lambda iq: iq.get_transactions(1700000000, 1800000000, 10, 0, ["deposit", "order_sell"]),
+         "rules": [{"on": "sendMessage:get-transactions",
+                    "reply": [{"name": "transactions", "request_id": "$RID", "msg": {"transactions": [{"id": 1}]}}]}],
+         "csharp": {"method": "GetTransactionsAsync",
+                    "args": {"from": 1700000000, "to": 1800000000, "limit": 10, "offset": 0, "types": ["deposit", "order_sell"]}}},
+    ]
     # @@CASES@@
     return cases
 

@@ -482,5 +482,150 @@ public sealed class IqOption : IAsyncDisposable
         foreach (var msg in frames) await SendRaw("subscribeMessage", msg, ct).ConfigureAwait(false);
     }
 
+    #region Account & balance
+
+    /// <summary>Profile of the logged-in user (Python <c>get_profile</c>; always fresh).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetProfileAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var r = await ByName("profile", new Obj { ["name"] = "get-profile", ["version"] = "1.0", ["body"] = new Obj() }, NextRid(), ct)
+            .ConfigureAwait(false);
+        return J.Obj(r["msg"]);
+    }
+
+    /// <summary>All balances: the raw <c>balances</c> message (Python <c>get_balances</c>; always fresh).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetBalancesAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        return await ByName("balances", new Obj { ["name"] = "get-balances", ["version"] = "1.0" }, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Amount of the selected balance (Python <c>get_balance_v2</c>): pushed value if known, else asks the server.</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<double?> GetBalanceAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        long id = Bal;
+        lock (_s.Lock)
+        {
+            if (_s.Balance.TryGetValue(id, out double cached)) return cached;
+        }
+        foreach (var b in J.Arr((await GetBalancesAsync(ct).ConfigureAwait(false))["msg"]))
+        {
+            if (J.Long(b!["id"]) != id) continue;
+            double amount = J.Dbl(b["amount"]);
+            lock (_s.Lock) _s.Balance[id] = amount;
+            return amount;
+        }
+        return null;
+    }
+
+    /// <summary>Id of the selected balance (Python <c>get_balance_id</c>).</summary>
+    public long? GetBalanceId()
+    {
+        lock (_s.Lock) return _s.BalanceId;
+    }
+
+    /// <summary>Whether the selected balance is real or practice (Python <c>get_balance_mode</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<BalanceMode?> GetBalanceModeAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        long? id = GetBalanceId();
+        foreach (var b in J.Arr((await GetBalancesAsync(ct).ConfigureAwait(false))["msg"]))
+        {
+            if (J.Long(b!["id"]) == id)
+                return J.Long(b["type"]) switch { 1 => BalanceMode.Real, 4 => BalanceMode.Practice, _ => null };
+        }
+        return null;
+    }
+
+    /// <summary>Balance id of a mode (Python <c>get_balance_id_by_mode</c>); null if the account has none.</summary>
+    /// <param name="mode">Real or practice.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<long?> GetBalanceIdByModeAsync(BalanceMode mode, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        long? real = null, practice = null;
+        foreach (var b in J.Arr((await GetBalancesAsync(ct).ConfigureAwait(false))["msg"]))
+        {
+            long type = J.Long(b!["type"]);
+            if (type == 1) real = J.Long(b["id"]);
+            if (type == 4) practice = J.Long(b["id"]);
+        }
+        return mode == BalanceMode.Real ? real : practice;
+    }
+
+    /// <summary>Selects the balance later trades use (Python <c>change_balance</c>; sends nothing to the server, like Python).</summary>
+    /// <param name="mode">Real or practice.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task ChangeBalanceAsync(BalanceMode mode, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        if (_balanceIds.Count == 0)
+        {
+            foreach (var b in J.Arr((await GetBalancesAsync(ct).ConfigureAwait(false))["msg"]))
+            {
+                long type = J.Long(b!["type"]);
+                if (type == 1) _balanceIds[BalanceMode.Real] = J.Long(b["id"]);
+                if (type == 4) _balanceIds[BalanceMode.Practice] = J.Long(b["id"]);
+            }
+        }
+        if (!_balanceIds.TryGetValue(mode, out long id)) throw new IqOptionException($"This account has no {mode} balance.");
+        lock (_s.Lock) _s.BalanceId = id;
+    }
+
+    /// <summary>Currency of the selected balance (Python <c>get_currency</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<string?> GetCurrencyAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        long? id = GetBalanceId();
+        foreach (var b in J.Arr((await GetBalancesAsync(ct).ConfigureAwait(false))["msg"]))
+        {
+            if (J.Long(b!["id"]) == id) return J.Str(b["currency"]);
+        }
+        return null;
+    }
+
+    /// <summary>Resets the practice balance (Python <c>reset_practice_balance</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> ResetPracticeBalanceAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        try
+        {
+            var r = await ByName("training-balance-reset", new Obj { ["name"] = "reset-training-balance", ["version"] = "2.0" }, "", ct)
+                .ConfigureAwait(false);
+            return J.IsTrue((r["msg"] as JsonObject)?["isSuccessful"]);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Account transactions (Python <c>get_transactions</c>); returns the whole message.</summary>
+    /// <param name="from">Start (Unix seconds).</param>
+    /// <param name="to">End (Unix seconds).</param>
+    /// <param name="limit">Page size.</param>
+    /// <param name="offset">Page offset.</param>
+    /// <param name="types">e.g. "deposit", "order_sell", "withdrawal".</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetTransactionsAsync(long from, long to, int limit, int offset, IEnumerable<string> types, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        return await ById("transactions", new Obj
+        {
+            ["name"] = "get-transactions",
+            ["body"] = new Obj { ["from"] = from, ["to"] = to, ["limit"] = limit, ["offset"] = offset, ["types"] = types.ToList() },
+        }, rid, ct).ConfigureAwait(false);
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }
