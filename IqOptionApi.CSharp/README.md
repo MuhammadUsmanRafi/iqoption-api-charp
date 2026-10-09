@@ -55,6 +55,20 @@ It connects, prints your balance, shows 10 candles, streams live candles for 30 
 **Safety lock:** it refuses to run unless the selected balance is PRACTICE. Pass `--allow-real` to override.
 Use an `-OTC` asset at weekends, when the normal markets are closed.
 
+### Bitcoin bot (all four products)
+
+```bash
+dotnet run --project examples/BitcoinBot -- status
+dotnet run --project examples/BitcoinBot -- blitz call --amount 6 --seconds 120
+dotnet run --project examples/BitcoinBot -- binary put --amount 1 --minutes 1
+dotnet run --project examples/BitcoinBot -- digital call --amount 1 --minutes 5
+dotnet run --project examples/BitcoinBot -- perp open buy --isolated --margin 1 --leverage 200
+dotnet run --project examples/BitcoinBot -- perp open sell --cross --count 0.01 --leverage 200 --close-after 30
+dotnet run --project examples/BitcoinBot -- perp close 100105469448
+```
+
+`status` shows which Bitcoin products are open now. Bitcoin digital has 5- and 15-minute expiries only (no 1 minute). Blitz, binary and digital wait for the result and print it. `perp open` prints the position id and leaves the position open (or closes it after `--close-after` seconds); `perp close <id>` closes it and prints the profit. It uses the PRACTICE balance unless you add `--real`.
+
 ## Options
 
 `new IqOption(email, password, new IqOptionOptions { ... })`: `Host`, `ProxyHost`/`ProxyPort`/`ProxyUser`/`ProxyPassword`, `Ssid` (reuse a session), `AutoLogout` (true), `AutoReconnect` (true), `RequestTimeout` (30 s), `ReceiveTimeout` (60 s of silence = dead connection), `ReconnectDelays`, `IgnoreCertificateErrors` (false), `TimeZone` (computer's zone), `Log`, `LogFrames` (false; frames contain your session id).
