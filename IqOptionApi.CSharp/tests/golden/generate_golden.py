@@ -218,8 +218,112 @@ def part_tables():
                           "countries": [[k, v] for k, v in Country.ID.items()]})
 
 
+# ----------------------------------------------------------- fixtures ----
+REAL_ID, PRACTICE_ID = 10001, 10004
+PROFILE = {"name": "profile", "request_id": "$RID",
+           "msg": {"user_id": 777, "name": "Test User", "currency": "USD", "balance_id": PRACTICE_ID}}
+BALANCES = {"name": "balances", "request_id": "$RID", "msg": [
+    {"id": REAL_ID, "type": 1, "amount": 0, "currency": "USD"},
+    {"id": PRACTICE_ID, "type": 4, "amount": 10000.5, "currency": "USD"}]}
+TIME_SYNC = {"name": "timeSync", "msg": T * 1000}
+
+
+def fixtures():
+    return {"T": T, "tz": METHOD_TZ, "real_id": REAL_ID, "practice_id": PRACTICE_ID,
+            "profile": PROFILE, "balances": BALANCES, "time_sync": TIME_SYNC}
+
+
+def make_client():
+    """An IQ_Option whose api looks exactly like it does right after a successful connect()."""
+    from iqoptionapi.stable_api import IQ_Option
+    from iqoptionapi.api import IQOptionAPI
+    from iqoptionapi.ws.client import WebsocketClient
+    import iqoptionapi.global_value as gv
+    iq = IQ_Option("user@example.com", "secret")
+    api = IQOptionAPI("iqoption.com", "user@example.com", "secret")
+    iq.api = api
+    api.websocket_client = WebsocketClient(api)
+    api.object_id = 1
+    api.init_global_value(1)
+    gv.get_req_id(1)                    # "1" is used by `authenticate` during a real connect
+    gv.balance_id[1] = PRACTICE_ID
+    gv._tmp_raw_balance_id.pop(1, None)   # change_balance cache must start empty
+    gv.check_websocket_if_connect[1] = 1
+    api.timesync.server_timestamp = T * 1000
+    api.profile.msg = PROFILE["msg"]
+    api.balances_raw = subst(BALANCES, "")
+    return iq, api
+
+
+ROUTER_MAXDICT = {"EURUSD": {"60": 2, "1": 2, "5": 2}}
+ROUTER_MESSAGES = [
+    {"name": "timeSync", "msg": T * 1000 + 250},
+    {"name": "balances", "msg": [{"id": 1, "type": 1, "amount": 5}, {"id": 2, "type": 4, "amount": 9}]},
+    {"name": "candle-generated", "msg": {"active_id": 1861, "size": 60, "from": 100, "to": 160, "id": 1, "open": 1.1, "close": 1.2, "min": 1.0, "max": 1.3, "volume": 0, "at": 5}},
+    {"name": "candle-generated", "msg": {"active_id": 1861, "size": 60, "from": 160, "to": 220, "id": 2, "open": 1.2, "close": 1.25, "min": 1.1, "max": 1.3, "volume": 0, "at": 6}},
+    {"name": "candle-generated", "msg": {"active_id": 1861, "size": 60, "from": 220, "to": 280, "id": 3, "open": 1.25, "close": 1.3, "min": 1.2, "max": 1.4, "volume": 0, "at": 7}},
+    {"name": "candle-generated", "msg": {"active_id": 1861, "size": 60, "from": 220, "to": 280, "id": 3, "open": 1.25, "close": 1.31, "min": 1.2, "max": 1.4, "volume": 0, "at": 8}},
+    {"name": "candles-generated", "msg": {"active_id": 1861, "at": 9, "ask": 1.4, "bid": 1.39, "value": 1.395,
+                                           "candles": {"1": {"id": 11, "from": 300, "to": 301, "open": 1.3, "min": 1.3, "max": 1.4, "volume": 1},
+                                                       "5": {"id": 12, "from": 300, "to": 305, "open": 1.3, "min": 1.3, "max": 1.4, "volume": 2}}}},
+    {"name": "commission-changed", "msg": {"instrument_type": "turbo-option", "active_id": 1861, "commission": {"value": 18}}},
+    {"name": "traders-mood-changed", "msg": {"asset_id": 1861, "value": 0.61}},
+    {"name": "top-assets-updated", "msg": {"instrument_type": "forex", "data": [{"active_id": 1861}]}},
+    {"name": "position-changed", "microserviceName": "portfolio", "msg": {"source": "digital-options", "status": "open", "external_id": 900, "raw_event": {"order_ids": [800]}}},
+    {"name": "position-changed", "microserviceName": "portfolio", "msg": {"source": "binary-options", "status": "open", "external_id": 901, "raw_event": {}}},
+    {"name": "position-changed", "microserviceName": "portfolio", "msg": {"source": "trading", "status": "closed", "external_id": 902, "raw_event": {"order_ids": [802]}}},
+    {"name": "order-changed", "microserviceName": "portfolio", "msg": {"source": "digital-options", "raw_event": {"position_id": 900, "id": 800}}},
+    {"name": "option-opened", "msg": {"option_id": 903, "amount": 1}},
+    {"name": "option-closed", "msg": {"option_id": 903, "amount": 1, "profit_amount": 1.85}},
+    {"name": "client-price-generated", "msg": {"asset_id": 1861, "prices": [
+        {"strike": "SPT", "call": {"symbol": "do1861A20261009D123300T1MCSPT", "ask": 52.5, "bid": 47}, "put": {"symbol": "do1861A20261009D123300T1MPSPT", "ask": 48.0, "bid": 51}},
+        {"strike": "1170000", "call": {"symbol": "C1"}, "put": {"symbol": "P1", "ask": 40}}]}},
+    {"name": "live-deal-binary-option-placed", "msg": {"active_id": 1861, "option_type": "turbo", "amount": 5}},
+    {"name": "live-deal-binary-option-placed", "msg": {"active_id": 1861, "option_type": "turbo", "amount": 6}},
+    {"name": "live-deal-digital-option", "msg": {"instrument_active_id": 76, "expiration_type": "PT1M", "amount_enrolled": 3}},
+    {"name": "live-deal", "msg": {"instrument_active_id": 1861, "instrument_type": "forex", "amount": 7}},
+    {"name": "balance-changed", "msg": {"current_balance": {"id": 2, "amount": 9.5}}},
+    {"name": "something-unknown", "msg": {"x": 1}},
+]
+
+
+def dump_state(api):
+    import iqoptionapi.global_value as gv
+    live = {}
+    for n, d1 in api.live_deal_data.items():
+        for a, d2 in d1.items():
+            for t, q in d2.items():
+                live["%s|%s|%s" % (n, a, t)] = list(q)
+    return prune(to_json({
+        "server_timestamp": api.timesync.server_timestamp,
+        "balance_id": gv.balance_id[api.object_id],
+        "real_time_candles": api.real_time_candles,
+        "candle_generated_check": {a: {s: v for s, v in d.items() if v is True} for a, d in api.candle_generated_check.items()},
+        "candle_generated_all_size_check": {a: v for a, v in api.candle_generated_all_size_check.items() if v is True},
+        "traders_mood": api.traders_mood,
+        "commission": api.subscribe_commission_changed_data,
+        "top_assets_updated": api.top_assets_updated_data,
+        "live_deal": live,
+        "order_async": {k: dict(v) for k, v in api.order_async.items()},
+        "option_opened": api.socket_option_opened,
+        "digital_opened": api.digital_opened,
+        "digital_profit": api.digital_profit,
+        "quotes": api.instrument_quites_generated_data,
+        "quotes_raw": api.instrument_quotes_generated_raw_data,
+        "balance": api.balance,
+    }))
+
+
 def part_router():
-    pass
+    import iqoptionapi.global_value as gv
+    iq, api = make_client()
+    gv.balance_id[1] = None
+    for asset, sizes in ROUTER_MAXDICT.items():
+        for size, maxdict in sizes.items():
+            api.real_time_candles_maxdict_table[asset][int(size)] = maxdict
+    for m in ROUTER_MESSAGES:
+        api.websocket_client.on_message(None, json.dumps(m))
+    write("router.json", {"maxdict": ROUTER_MAXDICT, "messages": ROUTER_MESSAGES, "state": dump_state(api)})
 
 
 def part_connect():

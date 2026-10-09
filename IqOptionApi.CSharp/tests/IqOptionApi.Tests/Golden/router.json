@@ -1,0 +1,629 @@
+{
+ "maxdict": {
+  "EURUSD": {
+   "60": 2,
+   "1": 2,
+   "5": 2
+  }
+ },
+ "messages": [
+  {
+   "name": "timeSync",
+   "msg": 1791549020250
+  },
+  {
+   "name": "balances",
+   "msg": [
+    {
+     "id": 1,
+     "type": 1,
+     "amount": 5
+    },
+    {
+     "id": 2,
+     "type": 4,
+     "amount": 9
+    }
+   ]
+  },
+  {
+   "name": "candle-generated",
+   "msg": {
+    "active_id": 1861,
+    "size": 60,
+    "from": 100,
+    "to": 160,
+    "id": 1,
+    "open": 1.1,
+    "close": 1.2,
+    "min": 1.0,
+    "max": 1.3,
+    "volume": 0,
+    "at": 5
+   }
+  },
+  {
+   "name": "candle-generated",
+   "msg": {
+    "active_id": 1861,
+    "size": 60,
+    "from": 160,
+    "to": 220,
+    "id": 2,
+    "open": 1.2,
+    "close": 1.25,
+    "min": 1.1,
+    "max": 1.3,
+    "volume": 0,
+    "at": 6
+   }
+  },
+  {
+   "name": "candle-generated",
+   "msg": {
+    "active_id": 1861,
+    "size": 60,
+    "from": 220,
+    "to": 280,
+    "id": 3,
+    "open": 1.25,
+    "close": 1.3,
+    "min": 1.2,
+    "max": 1.4,
+    "volume": 0,
+    "at": 7
+   }
+  },
+  {
+   "name": "candle-generated",
+   "msg": {
+    "active_id": 1861,
+    "size": 60,
+    "from": 220,
+    "to": 280,
+    "id": 3,
+    "open": 1.25,
+    "close": 1.31,
+    "min": 1.2,
+    "max": 1.4,
+    "volume": 0,
+    "at": 8
+   }
+  },
+  {
+   "name": "candles-generated",
+   "msg": {
+    "active_id": 1861,
+    "at": 9,
+    "ask": 1.4,
+    "bid": 1.39,
+    "value": 1.395,
+    "candles": {
+     "1": {
+      "id": 11,
+      "from": 300,
+      "to": 301,
+      "open": 1.3,
+      "min": 1.3,
+      "max": 1.4,
+      "volume": 1
+     },
+     "5": {
+      "id": 12,
+      "from": 300,
+      "to": 305,
+      "open": 1.3,
+      "min": 1.3,
+      "max": 1.4,
+      "volume": 2
+     }
+    }
+   }
+  },
+  {
+   "name": "commission-changed",
+   "msg": {
+    "instrument_type": "turbo-option",
+    "active_id": 1861,
+    "commission": {
+     "value": 18
+    }
+   }
+  },
+  {
+   "name": "traders-mood-changed",
+   "msg": {
+    "asset_id": 1861,
+    "value": 0.61
+   }
+  },
+  {
+   "name": "top-assets-updated",
+   "msg": {
+    "instrument_type": "forex",
+    "data": [
+     {
+      "active_id": 1861
+     }
+    ]
+   }
+  },
+  {
+   "name": "position-changed",
+   "microserviceName": "portfolio",
+   "msg": {
+    "source": "digital-options",
+    "status": "open",
+    "external_id": 900,
+    "raw_event": {
+     "order_ids": [
+      800
+     ]
+    }
+   }
+  },
+  {
+   "name": "position-changed",
+   "microserviceName": "portfolio",
+   "msg": {
+    "source": "binary-options",
+    "status": "open",
+    "external_id": 901,
+    "raw_event": {}
+   }
+  },
+  {
+   "name": "position-changed",
+   "microserviceName": "portfolio",
+   "msg": {
+    "source": "trading",
+    "status": "closed",
+    "external_id": 902,
+    "raw_event": {
+     "order_ids": [
+      802
+     ]
+    }
+   }
+  },
+  {
+   "name": "order-changed",
+   "microserviceName": "portfolio",
+   "msg": {
+    "source": "digital-options",
+    "raw_event": {
+     "position_id": 900,
+     "id": 800
+    }
+   }
+  },
+  {
+   "name": "option-opened",
+   "msg": {
+    "option_id": 903,
+    "amount": 1
+   }
+  },
+  {
+   "name": "option-closed",
+   "msg": {
+    "option_id": 903,
+    "amount": 1,
+    "profit_amount": 1.85
+   }
+  },
+  {
+   "name": "client-price-generated",
+   "msg": {
+    "asset_id": 1861,
+    "prices": [
+     {
+      "strike": "SPT",
+      "call": {
+       "symbol": "do1861A20261009D123300T1MCSPT",
+       "ask": 52.5,
+       "bid": 47
+      },
+      "put": {
+       "symbol": "do1861A20261009D123300T1MPSPT",
+       "ask": 48.0,
+       "bid": 51
+      }
+     },
+     {
+      "strike": "1170000",
+      "call": {
+       "symbol": "C1"
+      },
+      "put": {
+       "symbol": "P1",
+       "ask": 40
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "live-deal-binary-option-placed",
+   "msg": {
+    "active_id": 1861,
+    "option_type": "turbo",
+    "amount": 5
+   }
+  },
+  {
+   "name": "live-deal-binary-option-placed",
+   "msg": {
+    "active_id": 1861,
+    "option_type": "turbo",
+    "amount": 6
+   }
+  },
+  {
+   "name": "live-deal-digital-option",
+   "msg": {
+    "instrument_active_id": 76,
+    "expiration_type": "PT1M",
+    "amount_enrolled": 3
+   }
+  },
+  {
+   "name": "live-deal",
+   "msg": {
+    "instrument_active_id": 1861,
+    "instrument_type": "forex",
+    "amount": 7
+   }
+  },
+  {
+   "name": "balance-changed",
+   "msg": {
+    "current_balance": {
+     "id": 2,
+     "amount": 9.5
+    }
+   }
+  },
+  {
+   "name": "something-unknown",
+   "msg": {
+    "x": 1
+   }
+  }
+ ],
+ "state": {
+  "server_timestamp": 1791549020.25,
+  "balance_id": 2,
+  "real_time_candles": {
+   "EURUSD": {
+    "60": {
+     "160": {
+      "active_id": 1861,
+      "size": 60,
+      "from": 160,
+      "to": 220,
+      "id": 2,
+      "open": 1.2,
+      "close": 1.25,
+      "min": 1.1,
+      "max": 1.3,
+      "volume": 0,
+      "at": 6
+     },
+     "220": {
+      "active_id": 1861,
+      "size": 60,
+      "from": 220,
+      "to": 280,
+      "id": 3,
+      "open": 1.25,
+      "close": 1.31,
+      "min": 1.2,
+      "max": 1.4,
+      "volume": 0,
+      "at": 8
+     }
+    },
+    "1": {
+     "300": {
+      "id": 11,
+      "from": 300,
+      "to": 301,
+      "open": 1.3,
+      "min": 1.3,
+      "max": 1.4,
+      "volume": 1,
+      "active_id": 1861,
+      "at": 9,
+      "ask": 1.4,
+      "bid": 1.39,
+      "close": 1.395,
+      "size": 1
+     }
+    },
+    "5": {
+     "300": {
+      "id": 12,
+      "from": 300,
+      "to": 305,
+      "open": 1.3,
+      "min": 1.3,
+      "max": 1.4,
+      "volume": 2,
+      "active_id": 1861,
+      "at": 9,
+      "ask": 1.4,
+      "bid": 1.39,
+      "close": 1.395,
+      "size": 5
+     }
+    }
+   }
+  },
+  "candle_generated_check": {
+   "EURUSD": {
+    "60": true
+   }
+  },
+  "candle_generated_all_size_check": {
+   "EURUSD": true
+  },
+  "traders_mood": {
+   "1861": 0.61
+  },
+  "commission": {
+   "turbo-option": {
+    "EURUSD": {
+     "1791549020.25": 18
+    }
+   }
+  },
+  "top_assets_updated": {
+   "forex": [
+    {
+     "active_id": 1861
+    }
+   ]
+  },
+  "live_deal": {
+   "live-deal-binary-option-placed|EURUSD|turbo": [
+    {
+     "active_id": 1861,
+     "option_type": "turbo",
+     "amount": 6
+    },
+    {
+     "active_id": 1861,
+     "option_type": "turbo",
+     "amount": 5
+    }
+   ],
+   "live-deal-digital-option|EURUSD-OTC|PT1M": [
+    {
+     "instrument_active_id": 76,
+     "expiration_type": "PT1M",
+     "amount_enrolled": 3
+    }
+   ],
+   "live-deal|EURUSD|forex": [
+    {
+     "instrument_active_id": 1861,
+     "instrument_type": "forex",
+     "amount": 7
+    }
+   ]
+  },
+  "order_async": {
+   "800": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 900,
+      "raw_event": {
+       "order_ids": [
+        800
+       ]
+      }
+     }
+    },
+    "order-changed": {
+     "name": "order-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "raw_event": {
+       "position_id": 900,
+       "id": 800
+      }
+     }
+    }
+   },
+   "900": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "open",
+      "external_id": 900,
+      "raw_event": {
+       "order_ids": [
+        800
+       ]
+      }
+     }
+    },
+    "order-changed": {
+     "name": "order-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "raw_event": {
+       "position_id": 900,
+       "id": 800
+      }
+     }
+    }
+   },
+   "901": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "binary-options",
+      "status": "open",
+      "external_id": 901
+     }
+    }
+   },
+   "802": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "trading",
+      "status": "closed",
+      "external_id": 902,
+      "raw_event": {
+       "order_ids": [
+        802
+       ]
+      }
+     }
+    }
+   },
+   "902": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "trading",
+      "status": "closed",
+      "external_id": 902,
+      "raw_event": {
+       "order_ids": [
+        802
+       ]
+      }
+     }
+    }
+   },
+   "903": {
+    "option-opened": {
+     "name": "option-opened",
+     "msg": {
+      "option_id": 903,
+      "amount": 1
+     }
+    },
+    "option-closed": {
+     "name": "option-closed",
+     "msg": {
+      "option_id": 903,
+      "amount": 1,
+      "profit_amount": 1.85
+     }
+    }
+   }
+  },
+  "option_opened": {
+   "901": {
+    "name": "position-changed",
+    "microserviceName": "portfolio",
+    "msg": {
+     "source": "binary-options",
+     "status": "open",
+     "external_id": 901
+    }
+   }
+  },
+  "digital_opened": {
+   "900": {
+    "name": "position-changed",
+    "microserviceName": "portfolio",
+    "msg": {
+     "source": "digital-options",
+     "status": "open",
+     "external_id": 900,
+     "raw_event": {
+      "order_ids": [
+       800
+      ]
+     }
+    }
+   }
+  },
+  "digital_profit": {
+   "EURUSD": {
+    "60": 90.47619047619048
+   }
+  },
+  "quotes": {
+   "EURUSD": {
+    "60": {
+     "SPT": {
+      "call": {
+       "id": "do1861A20261009D123300T1MCSPT",
+       "profit": 90.47619047619048
+      },
+      "put": {
+       "id": "do1861A20261009D123300T1MPSPT",
+       "profit": 108.33333333333333
+      }
+     },
+     "1170000": {
+      "call": {
+       "id": "C1",
+       "profit": null
+      },
+      "put": {
+       "id": "P1",
+       "profit": 150.0
+      }
+     }
+    }
+   }
+  },
+  "quotes_raw": {
+   "EURUSD": {
+    "60": {
+     "name": "client-price-generated",
+     "msg": {
+      "asset_id": 1861,
+      "prices": [
+       {
+        "strike": "SPT",
+        "call": {
+         "symbol": "do1861A20261009D123300T1MCSPT",
+         "ask": 52.5,
+         "bid": 47
+        },
+        "put": {
+         "symbol": "do1861A20261009D123300T1MPSPT",
+         "ask": 48.0,
+         "bid": 51
+        }
+       },
+       {
+        "strike": "1170000",
+        "call": {
+         "symbol": "C1"
+        },
+        "put": {
+         "symbol": "P1",
+         "ask": 40
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "balance": {
+   "2": 9.5
+  }
+ }
+}

@@ -434,3 +434,19 @@ internal static partial class Helpers
             + "00T" + duration.ToString(CultureInfo.InvariantCulture) + "M" + (d == Direction.Call ? "C" : "P") + "SPT";
     }
 }
+
+internal static partial class Helpers
+{
+    /// <summary>Python <c>dict_queue_add</c>: replace a known key, otherwise evict the smallest keys until there is room.</summary>
+    internal static void DictQueueAdd(SortedDictionary<long, Candle> dict, int maxDict, long key, Candle value)
+    {
+        if (dict.ContainsKey(key))
+        {
+            dict[key] = value;
+            return;
+        }
+        if (maxDict <= 0) throw new InvalidOperationException("candle buffer size must be positive");
+        while (dict.Count >= maxDict) dict.Remove(dict.Keys.First());
+        dict[key] = value;
+    }
+}
