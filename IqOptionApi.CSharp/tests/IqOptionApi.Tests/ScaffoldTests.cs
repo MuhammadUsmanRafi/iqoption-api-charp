@@ -4,5 +4,5 @@ public class ScaffoldTests
 {
     [Fact]
     public void LibraryAssemblyLoads() =>
-        Assert.Equal("IqOptionApi", typeof(IqOptionApi.Marker).Assembly.GetName().Name);
+        Assert.Equal("IqOptionApi", typeof(IqOptionApi.Candle).Assembly.GetName().Name);
 }

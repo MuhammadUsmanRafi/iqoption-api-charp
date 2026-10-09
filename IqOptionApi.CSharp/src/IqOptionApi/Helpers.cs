@@ -418,6 +418,19 @@ internal static partial class Helpers
     }
 }
 
-internal static class Marker
+internal static partial class Helpers
 {
+    internal static string DirectionText(Direction d) => d == Direction.Call ? "call" : "put";
+
+    internal static TradeResult ResultOf(double profit) =>
+        profit > 0 ? TradeResult.Win : profit < 0 ? TradeResult.Loss : TradeResult.Equal;
+
+    /// <summary>New-format spot id, e.g. <c>do1A20210224D154900T1MCSPT</c> (date in UTC, like Python <c>utcfromtimestamp</c>).</summary>
+    internal static string DigitalSpotInstrumentId(int activeId, double exp, int duration, Direction d)
+    {
+        var utc = DateTime.UnixEpoch.AddSeconds(Math.Floor(exp));
+        return "do" + activeId.ToString(CultureInfo.InvariantCulture) + "A"
+            + utc.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "D" + utc.ToString("HHmm", CultureInfo.InvariantCulture)
+            + "00T" + duration.ToString(CultureInfo.InvariantCulture) + "M" + (d == Direction.Call ? "C" : "P") + "SPT";
+    }
 }

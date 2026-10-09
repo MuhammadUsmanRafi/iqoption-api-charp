@@ -212,7 +212,10 @@ def part_expiry(tz):
 
 # ---------------------------------------------------- later parts -------
 def part_tables():
-    pass
+    import iqoptionapi.constants as OP_code
+    import iqoptionapi.country_id as Country
+    write("tables.json", {"actives": [[k, v] for k, v in OP_code.ACTIVES.items()],
+                          "countries": [[k, v] for k, v in Country.ID.items()]})
 
 
 def part_router():
