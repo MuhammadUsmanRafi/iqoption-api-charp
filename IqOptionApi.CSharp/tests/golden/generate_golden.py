@@ -639,6 +639,80 @@ def build_cases():
         {"name": "digital_open_by_other_pc", "pre": [OPEN_777], "call": lambda iq: iq.get_digital_open_by_other_pc(),
          "csharp": {"method": "GetDigitalOpenByOtherPc", "args": {}}},
     ]
+    ORDER_FILLED = {"on": "sendMessage:get-order", "reply": [{"name": "order", "request_id": "$RID", "status": 2000,
+                                                              "msg": {"id": 4242, "status": "filled", "position_id": 5151}}]}
+    PLACED_TEMP = {"on": "sendMessage:place-order-temp",
+                   "reply": [{"name": "order-placed-temp", "request_id": "$RID", "msg": {"id": 4242}}]}
+
+    def ok_reply(on, name, msg=None):
+        return {"on": "sendMessage:" + on,
+                "reply": [{"name": name, "request_id": "$RID", "status": 2000, "msg": msg if msg is not None else {"ok": True}}]}
+
+    BUY_ORDER_ARGS = {"instrumentType": "forex", "instrumentId": "EURUSD", "side": "buy", "amount": 10, "leverage": 100,
+                      "type": "market", "limitPrice": None, "stopPrice": None, "stopLoseKind": "percent", "stopLoseValue": 50,
+                      "takeProfitKind": None, "takeProfitValue": None, "useTrailStop": False, "autoMarginCall": False,
+                      "useTokenForCommission": False}
+    HISTORY_5151 = ok_reply("get-history-positions", "history-positions", {"positions": [{"external_id": 5151, "pnl_realized": 2.675}]})
+    buy_order = lambda iq: iq.buy_order("forex", "EURUSD", "buy", 10, 100, "market", stop_lose_kind="percent", stop_lose_value=50)
+    cases += [
+        {"name": "buy_order", "call": buy_order, "rules": [PLACED_TEMP, ORDER_FILLED],
+         "csharp": {"method": "BuyOrderAsync", "args": BUY_ORDER_ARGS}},
+        {"name": "buy_order_rejected", "call": buy_order,
+         "rules": [PLACED_TEMP, {"on": "sendMessage:get-order", "reply": [{"name": "order", "request_id": "$RID", "status": 2000,
+                   "msg": {"id": 4242, "status": "rejected", "reject_status": "insufficient_funds", "position_id": None}}]}],
+         "csharp": {"method": "BuyOrderAsync", "args": BUY_ORDER_ARGS}},
+        {"name": "get_order", "call": lambda iq: iq.get_order(4242), "rules": [ORDER_FILLED],
+         "csharp": {"method": "GetOrderAsync", "args": {"id": 4242}}},
+        {"name": "change_auto_margin_call", "call": lambda iq: iq.change_auto_margin_call("order_id", 4242, True),
+         "rules": [ok_reply("change-auto-margin-call", "auto-margin-call-changed")],
+         "csharp": {"method": "ChangeAutoMarginCallAsync", "args": {"idName": "order_id", "id": 4242, "autoMarginCall": True}}},
+        {"name": "change_order_by_position",
+         "call": lambda iq: iq.change_order("position_id", 4242, "percent", 30, "percent", 60, False, False),
+         "rules": [ORDER_FILLED, ok_reply("change-tpsl", "tpsl-changed", {"changed": True}),
+                   ok_reply("change-auto-margin-call", "auto-margin-call-changed")],
+         "csharp": {"method": "ChangeOrderAsync", "args": {"idName": "position_id", "id": 4242, "stopLoseKind": "percent",
+                                                          "stopLoseValue": 30, "takeProfitKind": "percent", "takeProfitValue": 60,
+                                                          "useTrailStop": False, "autoMarginCall": False}}},
+        {"name": "get_async_order", "pre": [CLOSED_555], "call": lambda iq: dict(iq.get_async_order(555)),
+         "csharp": {"method": "GetAsyncOrder", "args": {"id": 555}}},
+        {"name": "get_pending", "call": lambda iq: iq.get_pending("forex"),
+         "rules": [ok_reply("get-deferred-orders", "deferred-orders", {"deferred_orders": []})],
+         "csharp": {"method": "GetPendingAsync", "args": {"type": "forex"}}},
+        {"name": "get_positions_forex", "call": lambda iq: iq.get_positions("forex"),
+         "rules": [ok_reply("get-positions", "positions", {"positions": [], "total": 0})],
+         "csharp": {"method": "GetPositionsAsync", "args": {"type": "forex"}}},
+        {"name": "get_positions_digital", "call": lambda iq: iq.get_positions("digital-option"),
+         "rules": [ok_reply("digital-options.get-positions", "positions", {"positions": []})],
+         "csharp": {"method": "GetPositionsAsync", "args": {"type": "digital-option"}}},
+        {"name": "portfolio_get_positions", "call": lambda iq: iq.portfolio_get_positions(),
+         "rules": [ok_reply("portfolio.get-positions", "positions", {"positions": []})],
+         "csharp": {"method": "GetPortfolioPositionsAsync", "args": {}}},
+        {"name": "get_position", "call": lambda iq: iq.get_position(4242),
+         "rules": [ORDER_FILLED, ok_reply("get-position", "position", {"id": 5151})],
+         "csharp": {"method": "GetPositionAsync", "args": {"id": 4242}}},
+        {"name": "get_position_history", "call": lambda iq: iq.get_position_history_v2(PRACTICE_ID, 0, T, 0, 10, ["forex", "crypto"]),
+         "rules": [ok_reply("get-history", "history", {"positions": []})],
+         "csharp": {"method": "GetPositionHistoryAsync", "args": {"balanceId": PRACTICE_ID, "start": 0, "end": T, "offset": 0,
+                                                                 "limit": 10, "types": ["forex", "crypto"]}}},
+        {"name": "get_history_positions", "call": lambda iq: iq.get_history_positions(5151), "rules": [HISTORY_5151],
+         "csharp": {"method": "GetHistoryPositionsAsync", "args": {"id": 5151}}},
+        {"name": "get_available_leverages", "call": lambda iq: iq.get_available_leverages("forex", "EURUSD"),
+         "rules": [ok_reply("get-available-leverages", "available-leverages", {"leverages": [1, 100]})],
+         "csharp": {"method": "GetAvailableLeveragesAsync", "args": {"type": "forex", "asset": "EURUSD"}}},
+        {"name": "get_available_leverages_all", "call": lambda iq: iq.get_available_leverages("forex"),
+         "rules": [ok_reply("get-available-leverages", "available-leverages", {"leverages": [1, 100]})],
+         "csharp": {"method": "GetAvailableLeveragesAsync", "args": {"type": "forex", "asset": ""}}},
+        {"name": "cancel_order", "call": lambda iq: iq.cancel_order(4242), "rules": [ok_reply("cancel-order", "order-canceled")],
+         "csharp": {"method": "CancelOrderAsync", "args": {"id": 4242}}},
+        {"name": "close_position", "call": lambda iq: iq.close_position(4242),
+         "rules": [ORDER_FILLED, ok_reply("close-position", "position-closed")],
+         "csharp": {"method": "ClosePositionAsync", "args": {"id": 4242}}},
+        {"name": "get_overnight_fee", "call": lambda iq: iq.get_overnight_fee("forex", "EURUSD"),
+         "rules": [ok_reply("get-overnight-fee", "overnight-fee", {"fee": 0.1})],
+         "csharp": {"method": "GetOvernightFeeAsync", "args": {"type": "forex", "asset": "EURUSD"}}},
+        {"name": "check_win_margin", "call": lambda iq: iq.check_win(4242, 0.01), "rules": [ORDER_FILLED, HISTORY_5151],
+         "csharp": {"method": "CheckWinMarginAsync", "args": {"id": 4242, "polling": 0.01}}},
+    ]
     # @@CASES@@
     return cases
 

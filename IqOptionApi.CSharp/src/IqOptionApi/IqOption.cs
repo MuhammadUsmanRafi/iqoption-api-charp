@@ -1652,5 +1652,413 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Margin (Forex / CFD / Crypto)
+
+    private static void CheckIdName(string idName)
+    {
+        if (idName != "order_id" && idName != "position_id")
+            throw new ArgumentException("idName must be \"order_id\" or \"position_id\"", nameof(idName));
+    }
+
+    private async Task<(bool Success, JsonObject? Message)> StatusReplyAsync(string reply, Obj msg, CancellationToken ct)
+    {
+        EnsureConnected();
+        try
+        {
+            var r = await ByName(reply, msg, "", ct).ConfigureAwait(false);
+            return Status2000(r) ? (true, r["msg"] as JsonObject) : (false, null);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>Opens a forex/CFD/crypto order (Python <c>buy_order</c>).</summary>
+    /// <param name="instrumentType">"forex", "cfd" or "crypto".</param>
+    /// <param name="instrumentId">Instrument id, e.g. "EURUSD".</param>
+    /// <param name="side">"buy" or "sell".</param>
+    /// <param name="amount">Investment.</param>
+    /// <param name="leverage">Leverage, e.g. 100.</param>
+    /// <param name="type">"market", "limit" or "stop".</param>
+    /// <param name="limitPrice">Limit price (type "limit").</param>
+    /// <param name="stopPrice">Stop price (type "stop").</param>
+    /// <param name="stopLoseKind">"percent", "price" or "diff".</param>
+    /// <param name="stopLoseValue">Stop-loss value.</param>
+    /// <param name="takeProfitKind">"percent", "price" or "diff".</param>
+    /// <param name="takeProfitValue">Take-profit value.</param>
+    /// <param name="useTrailStop">Trailing stop.</param>
+    /// <param name="autoMarginCall">Use balance to keep the position open.</param>
+    /// <param name="useTokenForCommission">Pay commission with tokens.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns><c>(true, orderId, null)</c>, or <c>(false, null, rejectStatus)</c>.</returns>
+    public async Task<(bool Success, long? OrderId, string? Error)> BuyOrderAsync(string instrumentType, string instrumentId, string side, double amount,
+        int leverage, string type, double? limitPrice = null, double? stopPrice = null, string? stopLoseKind = null, double? stopLoseValue = null,
+        string? takeProfitKind = null, double? takeProfitValue = null, bool useTrailStop = false, bool autoMarginCall = false,
+        bool useTokenForCommission = false, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        long orderId;
+        try
+        {
+            var r = await ById("order-placed-temp", new Obj
+            {
+                ["name"] = "place-order-temp",
+                ["version"] = "4.0",
+                ["body"] = new Obj
+                {
+                    ["instrument_type"] = instrumentType,
+                    ["instrument_id"] = instrumentId,
+                    ["side"] = side,
+                    ["amount"] = new PyFloat(amount),
+                    ["leverage"] = leverage,
+                    ["type"] = type,
+                    ["limit_price"] = limitPrice,
+                    ["stop_price"] = stopPrice,
+                    ["stop_lose_kind"] = stopLoseKind,
+                    ["stop_lose_value"] = stopLoseValue,
+                    ["take_profit_kind"] = takeProfitKind,
+                    ["take_profit_value"] = takeProfitValue,
+                    ["use_trail_stop"] = useTrailStop,
+                    ["auto_margin_call"] = autoMarginCall,
+                    ["use_token_for_commission"] = useTokenForCommission,
+                    ["user_balance_id"] = Bal,
+                    ["client_platform_id"] = "9",
+                },
+            }, rid, ct).ConfigureAwait(false);
+            orderId = J.Long(Path(r, "msg", "id"));
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null, Reason(ex));
+        }
+        var clock = Stopwatch.StartNew();
+        var (ok, data) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
+        while (data != null && J.Str(data["status"]) == "pending_new")
+        {
+            if (clock.Elapsed > T) return (false, null, "timeout");
+            (ok, data) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
+            await Task.Delay(Scaled(1), ct).ConfigureAwait(false);
+        }
+        if (!ok || data == null) return (false, null, null);
+        return J.Str(data["status"]) != "rejected" ? (true, orderId, null) : (false, null, J.Str(data["reject_status"]));
+    }
+
+    /// <summary>Changes stop-loss / take-profit (Python <c>change_order</c>); <paramref name="idName"/> is "order_id" or "position_id" (then <paramref name="id"/> is still an order id).</summary>
+    /// <param name="idName">"order_id" or "position_id".</param>
+    /// <param name="id">Order id.</param>
+    /// <param name="stopLoseKind">Stop-loss kind.</param>
+    /// <param name="stopLoseValue">Stop-loss value.</param>
+    /// <param name="takeProfitKind">Take-profit kind.</param>
+    /// <param name="takeProfitValue">Take-profit value.</param>
+    /// <param name="useTrailStop">Trailing stop.</param>
+    /// <param name="autoMarginCall">Auto margin call.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonNode? Result)> ChangeOrderAsync(string idName, long id, string? stopLoseKind, double? stopLoseValue,
+        string? takeProfitKind, double? takeProfitValue, bool useTrailStop, bool autoMarginCall, CancellationToken ct = default)
+    {
+        CheckIdName(idName);
+        EnsureConnected();
+        long target = id;
+        if (idName == "position_id")
+        {
+            var (ok, order) = await GetOrderAsync(id, ct).ConfigureAwait(false);
+            if (!ok || order == null) return (false, null);
+            target = J.Long(order["position_id"]);
+        }
+        var gate = _conn.Gate("tpsl-changed");
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            using var w = _conn.AddWaiter("tpsl-changed", null);
+            await Send("sendMessage", new Obj
+            {
+                ["name"] = "change-tpsl",
+                ["version"] = "2.0",
+                ["body"] = new Obj
+                {
+                    [idName] = target,
+                    ["stop_lose_kind"] = stopLoseKind,
+                    ["stop_lose_value"] = stopLoseValue,
+                    ["take_profit_kind"] = takeProfitKind,
+                    ["take_profit_value"] = takeProfitValue,
+                    ["use_trail_stop"] = useTrailStop,
+                    ["extra"] = new Obj { ["stop_lose_kind"] = stopLoseKind, ["take_profit_kind"] = takeProfitKind },
+                },
+            }, "", ct).ConfigureAwait(false);
+            await ChangeAutoMarginCallAsync(idName, target, autoMarginCall, ct).ConfigureAwait(false);
+            var r = await w.Task.WaitAsync(T, ct).ConfigureAwait(false);
+            return Status2000(r) ? (true, r["msg"]) : (false, r);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Turns "use balance to keep position open" on/off (Python <c>change_auto_margin_call</c>).</summary>
+    /// <param name="idName">"order_id" or "position_id".</param>
+    /// <param name="id">The id.</param>
+    /// <param name="autoMarginCall">On or off.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Message)> ChangeAutoMarginCallAsync(string idName, long id, bool autoMarginCall, CancellationToken ct = default)
+    {
+        CheckIdName(idName);
+        EnsureConnected();
+        try
+        {
+            var r = await ByName("auto-margin-call-changed", new Obj
+            {
+                ["name"] = "change-auto-margin-call", ["version"] = "2.0", ["body"] = new Obj { [idName] = id, ["auto_margin_call"] = autoMarginCall },
+            }, "", ct).ConfigureAwait(false);
+            return (Status2000(r), r);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>Order details (Python <c>get_order</c>): status pending_new / new / filled / rejected / canceled, position_id, …</summary>
+    /// <param name="orderId">Order id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Order)> GetOrderAsync(long orderId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            var r = await ById("order", new Obj { ["name"] = "get-order", ["body"] = new Obj { ["order_id"] = orderId } }, rid, ct).ConfigureAwait(false);
+            return Status2000(r) ? (true, r["msg"] as JsonObject) : (false, null);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>Pushed messages for an order/option/position id: "position-changed", "order-changed", "option-opened", "option-closed" (Python <c>get_async_order</c>).</summary>
+    /// <param name="id">Order, option or position id.</param>
+    public JsonObject GetAsyncOrder(long id)
+    {
+        lock (_s.Lock)
+        {
+            return _s.OrderAsync.TryGetValue(id, out var d)
+                ? new JsonObject(d.Select(x => KeyValuePair.Create(x.Key, (JsonNode?)x.Value.DeepClone())))
+                : new JsonObject();
+        }
+    }
+
+    /// <summary>Pending (limit/stop) orders (Python <c>get_pending</c>).</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, JsonObject? Message)> GetPendingAsync(string instrumentType, CancellationToken ct = default) =>
+        StatusReplyAsync("deferred-orders", new Obj
+        {
+            ["name"] = "get-deferred-orders", ["version"] = "1.0", ["body"] = new Obj { ["user_balance_id"] = Bal, ["instrument_type"] = instrumentType },
+        }, ct);
+
+    /// <summary>Open positions of one type (Python <c>get_positions</c>).</summary>
+    /// <param name="instrumentType">e.g. "forex", "digital-option", "fx-option".</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, JsonObject? Message)> GetPositionsAsync(string instrumentType, CancellationToken ct = default)
+    {
+        string name = instrumentType switch
+        {
+            "digital-option" => "digital-options.get-positions",
+            "fx-option" => "trading-fx-option.get-positions",
+            _ => "get-positions",
+        };
+        return StatusReplyAsync("positions", new Obj
+        {
+            ["name"] = name, ["body"] = new Obj { ["instrument_type"] = instrumentType, ["user_balance_id"] = Bal },
+        }, ct);
+    }
+
+    /// <summary>Open positions of every type (Python <c>portfolio_get_positions</c>); the whole message.</summary>
+    /// <param name="limit">Page size.</param>
+    /// <param name="offset">Page offset.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetPortfolioPositionsAsync(int limit = 1, int offset = 0, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        return await ByName("positions", new Obj
+        {
+            ["name"] = "portfolio.get-positions",
+            ["version"] = "3.0",
+            ["body"] = new Obj
+            {
+                // Python sends str(list) here; kept byte-for-byte.
+                ["instrument_type"] = "['cfd', 'forex', 'crypto', 'digital-option', 'turbo-option', 'binary-option']",
+                ["limit"] = limit,
+                ["offset"] = offset,
+            },
+        }, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Position of an order (Python <c>get_position</c>).</summary>
+    /// <param name="orderId">Order id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Message)> GetPositionAsync(long orderId, CancellationToken ct = default)
+    {
+        var (_, order) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
+        if (order == null) return (false, null);
+        return await StatusReplyAsync("position", new Obj
+        {
+            ["name"] = "get-position", ["body"] = new Obj { ["position_id"] = order["position_id"]?.DeepClone() },
+        }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Closed positions, paged (Python <c>get_position_history_v2</c>).</summary>
+    /// <param name="userBalanceId">Balance id.</param>
+    /// <param name="start">Start (Unix seconds).</param>
+    /// <param name="end">End (Unix seconds).</param>
+    /// <param name="offset">Page offset.</param>
+    /// <param name="limit">Page size.</param>
+    /// <param name="instrumentTypes">e.g. "forex", "crypto", "digital-option".</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Message)> GetPositionHistoryAsync(long userBalanceId, long start, long end, int offset, int limit,
+        IEnumerable<string> instrumentTypes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            var r = await ById("history", new Obj
+            {
+                ["name"] = "get-history",
+                ["body"] = new Obj
+                {
+                    ["instrument_types"] = instrumentTypes.ToList(),
+                    ["user_balance_id"] = userBalanceId,
+                    ["start"] = start,
+                    ["end"] = end,
+                    ["offset"] = offset,
+                    ["limit"] = limit,
+                },
+                ["version"] = "2.0",
+            }, rid, ct).ConfigureAwait(false);
+            return Status2000(r) ? (true, r["msg"] as JsonObject) : (false, null);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null);
+        }
+    }
+
+    /// <summary>History rows for one external id (Python <c>get_history_positions</c>); the whole message.</summary>
+    /// <param name="externalId">Position / option id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetHistoryPositionsAsync(long externalId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        return await ById("history-positions", new Obj
+        {
+            ["name"] = "get-history-positions", ["body"] = new Obj { ["external_id"] = externalId },
+        }, rid, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Available leverages (Python <c>get_available_leverages</c>); empty asset = all.</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="asset">Asset name or "".</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, JsonObject? Message)> GetAvailableLeveragesAsync(string instrumentType, string asset = "", CancellationToken ct = default) =>
+        StatusReplyAsync("available-leverages", new Obj
+        {
+            ["name"] = "get-available-leverages",
+            ["version"] = "2.0",
+            ["body"] = new Obj { ["instrument_type"] = instrumentType, ["actives"] = new object[] { asset == "" ? "" : Act(asset) } },
+        }, ct);
+
+    /// <summary>Cancels a pending order (Python <c>cancel_order</c>).</summary>
+    /// <param name="orderId">Order id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> CancelOrderAsync(long orderId, CancellationToken ct = default) =>
+        (await StatusReplyAsync("order-canceled", new Obj
+        {
+            ["name"] = "cancel-order", ["version"] = "1.0", ["body"] = new Obj { ["order_id"] = orderId },
+        }, ct).ConfigureAwait(false)).Success;
+
+    /// <summary>Closes the position opened by an order (Python <c>close_position</c>; takes the ORDER id).</summary>
+    /// <param name="orderId">Order id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> ClosePositionAsync(long orderId, CancellationToken ct = default)
+    {
+        var (_, order) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
+        if (order == null || J.IsNull(order["position_id"])) return false;
+        return (await StatusReplyAsync("position-closed", new Obj
+        {
+            ["name"] = "close-position", ["version"] = "1.0", ["body"] = new Obj { ["position_id"] = order["position_id"]!.DeepClone() },
+        }, ct).ConfigureAwait(false)).Success;
+    }
+
+    /// <summary>Overnight fee (Python <c>get_overnight_fee</c>).</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, JsonObject? Message)> GetOvernightFeeAsync(string instrumentType, string asset, CancellationToken ct = default) =>
+        StatusReplyAsync("overnight-fee", new Obj
+        {
+            ["name"] = "get-overnight-fee", ["version"] = "1.0", ["body"] = new Obj { ["user_group_id"] = 1, ["instrument_type"] = instrumentType, ["active_id"] = Act(asset) },
+        }, ct);
+
+    /// <summary>Waits for the realised profit of an order or option from the trade history (Python <c>check_win</c>); null if the order was cancelled. No timeout.</summary>
+    /// <param name="id">Order id (margin) or option id.</param>
+    /// <param name="pollingSeconds">How often to ask.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<double?> CheckWinMarginAsync(long id, double pollingSeconds = 0.5, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var (check, data) = await GetOrderAsync(id, ct).ConfigureAwait(false);
+        long? positionId = null;
+        while (true)
+        {
+            if (positionId == null)
+            {
+                if (check && data != null)
+                {
+                    var pid = data["position_id"];
+                    while (J.IsNull(pid))
+                    {
+                        var (_, again) = await GetOrderAsync(id, ct).ConfigureAwait(false);
+                        if (again != null)
+                        {
+                            pid = again["position_id"];
+                            if (J.Str(again["status"]) == "canceled") return null;
+                        }
+                        await Task.Delay(Scaled(pollingSeconds), ct).ConfigureAwait(false);
+                    }
+                    positionId = J.Long(pid);
+                }
+                else
+                {
+                    positionId = id;
+                }
+            }
+            var pnl = await RawCheckWinAsync(positionId.Value, ct).ConfigureAwait(false);
+            if (pnl != null) return pnl;
+            await Task.Delay(Scaled(pollingSeconds), ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<double?> RawCheckWinAsync(long externalId, CancellationToken ct)
+    {
+        var data = await GetHistoryPositionsAsync(externalId, ct).ConfigureAwait(false);
+        JsonNode? row = null;
+        foreach (var r in J.Arr(Path(data, "msg", "positions")))
+        {
+            if (J.Long(r!["external_id"]) == externalId) row = r;
+        }
+        return row == null ? null : Helpers.PyRound2(J.Dbl(row["pnl_realized"]));
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }

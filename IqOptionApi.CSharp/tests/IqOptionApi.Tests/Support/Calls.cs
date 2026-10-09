@@ -126,6 +126,42 @@ internal static class Calls
             case "GetDigitalOpenByOtherPc":
                 return new JsonObject(api.GetDigitalOpenByOtherPc().Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value.DeepClone())));
 
+            case "BuyOrderAsync":
+            {
+                var (ok, id, err) = await api.BuyOrderAsync(S(a, "instrumentType"), S(a, "instrumentId"), S(a, "side"), D(a, "amount"), I(a, "leverage"),
+                    S(a, "type"), DN(a, "limitPrice"), DN(a, "stopPrice"), SN(a, "stopLoseKind"), DN(a, "stopLoseValue"), SN(a, "takeProfitKind"),
+                    DN(a, "takeProfitValue"), B(a, "useTrailStop"), B(a, "autoMarginCall"), B(a, "useTokenForCommission"));
+                return Tuple(ok, ok ? (object?)id : err);
+            }
+            case "GetOrderAsync": { var (ok, o) = await api.GetOrderAsync(L(a, "id")); return Tuple(ok, o); }
+            case "ChangeAutoMarginCallAsync":
+            {
+                var (ok, m) = await api.ChangeAutoMarginCallAsync(S(a, "idName"), L(a, "id"), B(a, "autoMarginCall"));
+                return Tuple(ok, m);
+            }
+            case "ChangeOrderAsync":
+            {
+                var (ok, r) = await api.ChangeOrderAsync(S(a, "idName"), L(a, "id"), SN(a, "stopLoseKind"), DN(a, "stopLoseValue"),
+                    SN(a, "takeProfitKind"), DN(a, "takeProfitValue"), B(a, "useTrailStop"), B(a, "autoMarginCall"));
+                return Tuple(ok, r);
+            }
+            case "GetAsyncOrder": return api.GetAsyncOrder(L(a, "id"));
+            case "GetPendingAsync": { var (ok, m) = await api.GetPendingAsync(S(a, "type")); return Tuple(ok, m); }
+            case "GetPositionsAsync": { var (ok, m) = await api.GetPositionsAsync(S(a, "type")); return Tuple(ok, m); }
+            case "GetPortfolioPositionsAsync": return await api.GetPortfolioPositionsAsync();
+            case "GetPositionAsync": { var (ok, m) = await api.GetPositionAsync(L(a, "id")); return Tuple(ok, m); }
+            case "GetPositionHistoryAsync":
+            {
+                var (ok, m) = await api.GetPositionHistoryAsync(L(a, "balanceId"), L(a, "start"), L(a, "end"), I(a, "offset"), I(a, "limit"), Strings(a, "types"));
+                return Tuple(ok, m);
+            }
+            case "GetHistoryPositionsAsync": return await api.GetHistoryPositionsAsync(L(a, "id"));
+            case "GetAvailableLeveragesAsync": { var (ok, m) = await api.GetAvailableLeveragesAsync(S(a, "type"), S(a, "asset")); return Tuple(ok, m); }
+            case "CancelOrderAsync": return await api.CancelOrderAsync(L(a, "id"));
+            case "ClosePositionAsync": return await api.ClosePositionAsync(L(a, "id"));
+            case "GetOvernightFeeAsync": { var (ok, m) = await api.GetOvernightFeeAsync(S(a, "type"), S(a, "asset")); return Tuple(ok, m); }
+            case "CheckWinMarginAsync": return ToNode(await api.CheckWinMarginAsync(L(a, "id"), D(a, "polling")));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);

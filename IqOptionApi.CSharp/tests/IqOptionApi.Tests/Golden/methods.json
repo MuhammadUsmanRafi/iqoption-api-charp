@@ -7240,6 +7240,886 @@
     }
    },
    "compare_result": true
+  },
+  {
+   "name": "buy_order",
+   "csharp": {
+    "method": "BuyOrderAsync",
+    "args": {
+     "instrumentType": "forex",
+     "instrumentId": "EURUSD",
+     "side": "buy",
+     "amount": 10,
+     "leverage": 100,
+     "type": "market",
+     "limitPrice": null,
+     "stopPrice": null,
+     "stopLoseKind": "percent",
+     "stopLoseValue": 50,
+     "takeProfitKind": null,
+     "takeProfitValue": null,
+     "useTrailStop": false,
+     "autoMarginCall": false,
+     "useTokenForCommission": false
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:place-order-temp",
+     "reply": [
+      {
+       "name": "order-placed-temp",
+       "request_id": "$RID",
+       "msg": {
+        "id": 4242
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"place-order-temp\", \"version\": \"4.0\", \"body\": {\"instrument_type\": \"forex\", \"instrument_id\": \"EURUSD\", \"side\": \"buy\", \"amount\": 10.0, \"leverage\": 100, \"type\": \"market\", \"limit_price\": null, \"stop_price\": null, \"stop_lose_kind\": \"percent\", \"stop_lose_value\": 50, \"take_profit_kind\": null, \"take_profit_value\": null, \"use_trail_stop\": false, \"auto_margin_call\": false, \"use_token_for_commission\": false, \"user_balance_id\": 10004, \"client_platform_id\": \"9\"}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"3\"}"
+   ],
+   "result": [
+    true,
+    4242
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_order_rejected",
+   "csharp": {
+    "method": "BuyOrderAsync",
+    "args": {
+     "instrumentType": "forex",
+     "instrumentId": "EURUSD",
+     "side": "buy",
+     "amount": 10,
+     "leverage": 100,
+     "type": "market",
+     "limitPrice": null,
+     "stopPrice": null,
+     "stopLoseKind": "percent",
+     "stopLoseValue": 50,
+     "takeProfitKind": null,
+     "takeProfitValue": null,
+     "useTrailStop": false,
+     "autoMarginCall": false,
+     "useTokenForCommission": false
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:place-order-temp",
+     "reply": [
+      {
+       "name": "order-placed-temp",
+       "request_id": "$RID",
+       "msg": {
+        "id": 4242
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "rejected",
+        "reject_status": "insufficient_funds",
+        "position_id": null
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"place-order-temp\", \"version\": \"4.0\", \"body\": {\"instrument_type\": \"forex\", \"instrument_id\": \"EURUSD\", \"side\": \"buy\", \"amount\": 10.0, \"leverage\": 100, \"type\": \"market\", \"limit_price\": null, \"stop_price\": null, \"stop_lose_kind\": \"percent\", \"stop_lose_value\": 50, \"take_profit_kind\": null, \"take_profit_value\": null, \"use_trail_stop\": false, \"auto_margin_call\": false, \"use_token_for_commission\": false, \"user_balance_id\": 10004, \"client_platform_id\": \"9\"}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"3\"}"
+   ],
+   "result": [
+    false,
+    "insufficient_funds"
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_order",
+   "csharp": {
+    "method": "GetOrderAsync",
+    "args": {
+     "id": 4242
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    {
+     "id": 4242,
+     "status": "filled",
+     "position_id": 5151
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "change_auto_margin_call",
+   "csharp": {
+    "method": "ChangeAutoMarginCallAsync",
+    "args": {
+     "idName": "order_id",
+     "id": 4242,
+     "autoMarginCall": true
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:change-auto-margin-call",
+     "reply": [
+      {
+       "name": "auto-margin-call-changed",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "ok": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"change-auto-margin-call\", \"version\": \"2.0\", \"body\": {\"order_id\": 4242, \"auto_margin_call\": true}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "name": "auto-margin-call-changed",
+     "request_id": "",
+     "status": 2000,
+     "msg": {
+      "ok": true
+     }
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "change_order_by_position",
+   "csharp": {
+    "method": "ChangeOrderAsync",
+    "args": {
+     "idName": "position_id",
+     "id": 4242,
+     "stopLoseKind": "percent",
+     "stopLoseValue": 30,
+     "takeProfitKind": "percent",
+     "takeProfitValue": 60,
+     "useTrailStop": false,
+     "autoMarginCall": false
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:change-tpsl",
+     "reply": [
+      {
+       "name": "tpsl-changed",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "changed": true
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:change-auto-margin-call",
+     "reply": [
+      {
+       "name": "auto-margin-call-changed",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "ok": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"change-tpsl\", \"version\": \"2.0\", \"body\": {\"position_id\": 5151, \"stop_lose_kind\": \"percent\", \"stop_lose_value\": 30, \"take_profit_kind\": \"percent\", \"take_profit_value\": 60, \"use_trail_stop\": false, \"extra\": {\"stop_lose_kind\": \"percent\", \"take_profit_kind\": \"percent\"}}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"change-auto-margin-call\", \"version\": \"2.0\", \"body\": {\"position_id\": 5151, \"auto_margin_call\": false}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "changed": true
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_async_order",
+   "csharp": {
+    "method": "GetAsyncOrder",
+    "args": {
+     "id": 555
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "closed",
+      "close_reason": "expired",
+      "close_profit": 1.9,
+      "invest": 1,
+      "pnl_realized": 0.9,
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ]
+      }
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "position-changed": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "digital-options",
+      "status": "closed",
+      "close_reason": "expired",
+      "close_profit": 1.9,
+      "invest": 1,
+      "pnl_realized": 0.9,
+      "external_id": 777,
+      "raw_event": {
+       "order_ids": [
+        555
+       ]
+      }
+     }
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_pending",
+   "csharp": {
+    "method": "GetPendingAsync",
+    "args": {
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-deferred-orders",
+     "reply": [
+      {
+       "name": "deferred-orders",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "deferred_orders": []
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-deferred-orders\", \"version\": \"1.0\", \"body\": {\"user_balance_id\": 10004, \"instrument_type\": \"forex\"}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "deferred_orders": []
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_positions_forex",
+   "csharp": {
+    "method": "GetPositionsAsync",
+    "args": {
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-positions",
+     "reply": [
+      {
+       "name": "positions",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": [],
+        "total": 0
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-positions\", \"body\": {\"instrument_type\": \"forex\", \"user_balance_id\": 10004}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "positions": [],
+     "total": 0
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_positions_digital",
+   "csharp": {
+    "method": "GetPositionsAsync",
+    "args": {
+     "type": "digital-option"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:digital-options.get-positions",
+     "reply": [
+      {
+       "name": "positions",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": []
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"digital-options.get-positions\", \"body\": {\"instrument_type\": \"digital-option\", \"user_balance_id\": 10004}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "positions": []
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "portfolio_get_positions",
+   "csharp": {
+    "method": "GetPortfolioPositionsAsync",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:portfolio.get-positions",
+     "reply": [
+      {
+       "name": "positions",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": []
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"portfolio.get-positions\", \"version\": \"3.0\", \"body\": {\"instrument_type\": \"['cfd', 'forex', 'crypto', 'digital-option', 'turbo-option', 'binary-option']\", \"limit\": 1, \"offset\": 0}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "name": "positions",
+    "request_id": "",
+    "status": 2000,
+    "msg": {
+     "positions": []
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_position",
+   "csharp": {
+    "method": "GetPositionAsync",
+    "args": {
+     "id": 4242
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:get-position",
+     "reply": [
+      {
+       "name": "position",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 5151
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-position\", \"body\": {\"position_id\": 5151}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "id": 5151
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_position_history",
+   "csharp": {
+    "method": "GetPositionHistoryAsync",
+    "args": {
+     "balanceId": 10004,
+     "start": 0,
+     "end": 1791549020,
+     "offset": 0,
+     "limit": 10,
+     "types": [
+      "forex",
+      "crypto"
+     ]
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-history",
+     "reply": [
+      {
+       "name": "history",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": []
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-history\", \"body\": {\"instrument_types\": [\"forex\", \"crypto\"], \"user_balance_id\": 10004, \"start\": 0, \"end\": 1791549020, \"offset\": 0, \"limit\": 10}, \"version\": \"2.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    {
+     "positions": []
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_history_positions",
+   "csharp": {
+    "method": "GetHistoryPositionsAsync",
+    "args": {
+     "id": 5151
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-history-positions",
+     "reply": [
+      {
+       "name": "history-positions",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": [
+         {
+          "external_id": 5151,
+          "pnl_realized": 2.675
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-history-positions\", \"body\": {\"external_id\": 5151}}, \"request_id\": \"2\"}"
+   ],
+   "result": {
+    "name": "history-positions",
+    "request_id": "2",
+    "status": 2000,
+    "msg": {
+     "positions": [
+      {
+       "external_id": 5151,
+       "pnl_realized": 2.675
+      }
+     ]
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_available_leverages",
+   "csharp": {
+    "method": "GetAvailableLeveragesAsync",
+    "args": {
+     "type": "forex",
+     "asset": "EURUSD"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-available-leverages",
+     "reply": [
+      {
+       "name": "available-leverages",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "leverages": [
+         1,
+         100
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-available-leverages\", \"version\": \"2.0\", \"body\": {\"instrument_type\": \"forex\", \"actives\": [1861]}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "leverages": [
+      1,
+      100
+     ]
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "get_available_leverages_all",
+   "csharp": {
+    "method": "GetAvailableLeveragesAsync",
+    "args": {
+     "type": "forex",
+     "asset": ""
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-available-leverages",
+     "reply": [
+      {
+       "name": "available-leverages",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "leverages": [
+         1,
+         100
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-available-leverages\", \"version\": \"2.0\", \"body\": {\"instrument_type\": \"forex\", \"actives\": [\"\"]}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "leverages": [
+      1,
+      100
+     ]
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "cancel_order",
+   "csharp": {
+    "method": "CancelOrderAsync",
+    "args": {
+     "id": 4242
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:cancel-order",
+     "reply": [
+      {
+       "name": "order-canceled",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "ok": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"cancel-order\", \"version\": \"1.0\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"\"}"
+   ],
+   "result": true,
+   "compare_result": true
+  },
+  {
+   "name": "close_position",
+   "csharp": {
+    "method": "ClosePositionAsync",
+    "args": {
+     "id": 4242
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:close-position",
+     "reply": [
+      {
+       "name": "position-closed",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "ok": true
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"close-position\", \"version\": \"1.0\", \"body\": {\"position_id\": 5151}}, \"request_id\": \"\"}"
+   ],
+   "result": true,
+   "compare_result": true
+  },
+  {
+   "name": "get_overnight_fee",
+   "csharp": {
+    "method": "GetOvernightFeeAsync",
+    "args": {
+     "type": "forex",
+     "asset": "EURUSD"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-overnight-fee",
+     "reply": [
+      {
+       "name": "overnight-fee",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "fee": 0.1
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-overnight-fee\", \"version\": \"1.0\", \"body\": {\"user_group_id\": 1, \"instrument_type\": \"forex\", \"active_id\": 1861}}, \"request_id\": \"\"}"
+   ],
+   "result": [
+    true,
+    {
+     "fee": 0.1
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "check_win_margin",
+   "csharp": {
+    "method": "CheckWinMarginAsync",
+    "args": {
+     "id": 4242,
+     "polling": 0.01
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-order",
+     "reply": [
+      {
+       "name": "order",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "id": 4242,
+        "status": "filled",
+        "position_id": 5151
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:get-history-positions",
+     "reply": [
+      {
+       "name": "history-positions",
+       "request_id": "$RID",
+       "status": 2000,
+       "msg": {
+        "positions": [
+         {
+          "external_id": 5151,
+          "pnl_realized": 2.675
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-order\", \"body\": {\"order_id\": 4242}}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-history-positions\", \"body\": {\"external_id\": 5151}}, \"request_id\": \"3\"}"
+   ],
+   "result": 2.67,
+   "compare_result": true
   }
  ]
 }
