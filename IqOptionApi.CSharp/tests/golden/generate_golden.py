@@ -435,6 +435,66 @@ def build_cases():
          "csharp": {"method": "GetTransactionsAsync",
                     "args": {"from": 1700000000, "to": 1800000000, "limit": 10, "offset": 0, "types": ["deposit", "order_sell"]}}},
     ]
+    def active(name, ticker, enabled, suspended, exchange, provider, commission):
+        return {"name": name, "ticker": ticker, "enabled": enabled, "is_suspended": suspended,
+                "exchange": exchange, "provider": provider, "option": {"profit": {"commission": commission}}}
+
+    INIT = {"name": "initialization-data", "request_id": "$RID", "msg": {
+        "binary": {"actives": {"1861": active("front.EURUSD", "EURUSD", True, False, "", "", 20),
+                               "76": active("front.EURUSD-OTC", "EURUSD-OTC", True, True, "x", "OTC", 15)}},
+        "turbo": {"actives": {"1861": active("front.EURUSD", "EURUSD", True, False, "", "", 13),
+                              "9999": active("front.NEWASSET", "NEWASSET", False, False, "", "", 30)}},
+        "blitz": {"actives": {"76": active("front.EURUSD-OTC", "EURUSD-OTC", True, False, "", "OTC", 43)}}}}
+    INIT_RULE = {"on": "sendMessage:get-initialization-data", "reply": [INIT]}
+    UNDERLYING = {"name": "underlying-list", "request_id": "$RID", "msg": {"underlying": [
+        {"active_id": 1861, "name": "EURUSD", "underlying": "EURUSD", "schedule": [{"open": T - 100, "close": T + 100}]},
+        {"active_id": 5555, "name": "NEWDIGI", "underlying": "NEWDIGI", "schedule": [{"open": T + 100, "close": T + 200}]}]}}
+    UNDERLYING_RULE = {"on": "sendMessage:digital-option-instruments.get-underlying-list", "reply": [UNDERLYING]}
+    INSTRUMENTS = {"name": "instruments", "request_id": "", "msg": {"instruments": [
+        {"id": "EURUSD-FX", "active_id": 1, "name": "EUR/USD", "schedule": [{"open": T - 10, "close": T + 10}]},
+        {"id": "BTCX", "active_id": 6666, "name": "BTC/X", "schedule": []}]}}
+    INSTRUMENTS_RULE = {"on": "sendMessage:get-instruments", "reply": [INSTRUMENTS]}
+
+    def detail_from_v2(iq):
+        iq.get_all_init = lambda: {"isSuccessful": True, "result": iq.get_all_init_v2()}
+        return iq.get_binary_option_detail()
+
+    cases += [
+        {"name": "get_all_init", "call": lambda iq: iq.get_all_init_v2(), "rules": [INIT_RULE],
+         "csharp": {"method": "GetAllInitAsync", "args": {}}},
+        {"name": "get_all_profit", "call": lambda iq: iq.get_all_profit_v2(), "rules": [INIT_RULE],
+         "csharp": {"method": "GetAllProfitAsync", "args": {}}},
+        {"name": "get_all_profit_blitz", "call": lambda iq: iq.get_all_profit_blitz_v2(), "rules": [INIT_RULE],
+         "csharp": {"method": "GetAllProfitBlitzAsync", "args": {}}},
+        {"name": "update_actives", "call": lambda iq: (iq.update_ACTIVES_OPCODE(), actives_items())[1], "rules": [INIT_RULE],
+         "csharp": {"method": "UpdateActivesAsync", "args": {}}},
+        {"name": "get_binary_option_detail", "call": detail_from_v2, "rules": [INIT_RULE],
+         "csharp": {"method": "GetBinaryOptionDetailAsync", "args": {}}},
+        {"name": "get_digital_underlying_list", "call": lambda iq: iq.get_digital_underlying_list_data(), "rules": [UNDERLYING_RULE],
+         "csharp": {"method": "GetDigitalUnderlyingListAsync", "args": {}}},
+        {"name": "update_digital_actives", "call": lambda iq: (iq.get_All_Digital_ACTIVES_OPCODE(), actives_items())[1],
+         "rules": [UNDERLYING_RULE], "csharp": {"method": "UpdateDigitalActivesAsync", "args": {}}},
+        {"name": "get_instruments", "call": lambda iq: iq.get_instruments("forex"), "rules": [INSTRUMENTS_RULE],
+         "csharp": {"method": "GetInstrumentsAsync", "args": {"type": "forex"}}},
+        {"name": "update_margin_actives_forex", "call": lambda iq: (iq.instruments_input_to_ACTIVES("forex"), actives_items())[1],
+         "rules": [INSTRUMENTS_RULE], "csharp": {"method": "UpdateMarginActivesAsync", "args": {"type": "forex"}}},
+        {"name": "update_margin_actives_all", "call": lambda iq: (iq.instruments_input_all_in_ACTIVES(), actives_items())[1],
+         "rules": [INSTRUMENTS_RULE], "csharp": {"method": "UpdateMarginActivesAsync", "args": {"type": None}}},
+        {"name": "get_all_open_time", "call": lambda iq: iq.get_all_open_time(0),
+         "rules": [INIT_RULE, UNDERLYING_RULE, INSTRUMENTS_RULE], "csharp": {"method": "GetAllOpenTimeAsync", "args": {}}},
+        {"name": "get_financial_information", "call": lambda iq: iq.get_financial_information(1861),
+         "rules": [{"on": "sendMessage:get-financial-information",
+                    "reply": [{"name": "financial-information", "request_id": "", "msg": {"data": {"active": {"name": "EUR/USD"}}}}]}],
+         "csharp": {"method": "GetFinancialInformationAsync", "args": {"activeId": 1861}}},
+        {"name": "get_name_by_active_id", "call": lambda iq: iq.get_name_by_activeId(1861),
+         "rules": [{"on": "sendMessage:get-financial-information",
+                    "reply": [{"name": "financial-information", "request_id": "", "msg": {"data": {"active": {"name": "EUR/USD"}}}}]}],
+         "csharp": {"method": "GetNameByActiveIdAsync", "args": {"activeId": 1861}}},
+        {"name": "get_top_asset", "call": lambda iq: iq.get_top_asset("forex"),
+         "rules": [{"on": "sendMessage:get-top-assets", "reply": [{"name": "top-assets", "request_id": "$RID", "msg": {"data": [1, 2]}}]}],
+         "csharp": {"method": "GetTopAssetAsync", "args": {"type": "forex"}}},
+        {"name": "opcode_to_name", "call": lambda iq: iq.opcode_to_name(76), "csharp": {"method": "OpcodeToName", "args": {"activeId": 76}}},
+    ]
     # @@CASES@@
     return cases
 

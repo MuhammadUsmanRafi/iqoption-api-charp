@@ -29,6 +29,25 @@ internal static class Calls
             case "GetTransactionsAsync":
                 return await api.GetTransactionsAsync(L(a, "from"), L(a, "to"), I(a, "limit"), I(a, "offset"), Strings(a, "types"));
 
+            case "GetAllInitAsync": return await api.GetAllInitAsync();
+            case "GetAllProfitAsync": return Nested(await api.GetAllProfitAsync());
+            case "GetAllProfitBlitzAsync": return Nested(await api.GetAllProfitBlitzAsync());
+            case "UpdateActivesAsync": await api.UpdateActivesAsync(); return Items(api.GetAllActives());
+            case "GetBinaryOptionDetailAsync":
+                return new JsonObject((await api.GetBinaryOptionDetailAsync()).Select(x => KeyValuePair.Create(x.Key,
+                    (JsonNode?)new JsonObject(x.Value.Select(y => KeyValuePair.Create(y.Key, (JsonNode?)y.Value.DeepClone()))))));
+            case "GetDigitalUnderlyingListAsync": return await api.GetDigitalUnderlyingListAsync();
+            case "UpdateDigitalActivesAsync": await api.UpdateDigitalActivesAsync(); return Items(api.GetAllActives());
+            case "GetInstrumentsAsync": return await api.GetInstrumentsAsync(S(a, "type"));
+            case "UpdateMarginActivesAsync": await api.UpdateMarginActivesAsync(SN(a, "type")); return Items(api.GetAllActives());
+            case "GetAllOpenTimeAsync":
+                return new JsonObject((await api.GetAllOpenTimeAsync()).Select(t => KeyValuePair.Create(t.Key,
+                    (JsonNode?)new JsonObject(t.Value.Select(x => KeyValuePair.Create(x.Key, (JsonNode?)new JsonObject { ["open"] = x.Value }))))));
+            case "GetFinancialInformationAsync": return await api.GetFinancialInformationAsync(I(a, "activeId"));
+            case "GetNameByActiveIdAsync": return await api.GetNameByActiveIdAsync(I(a, "activeId"));
+            case "GetTopAssetAsync": return await api.GetTopAssetAsync(S(a, "type"));
+            case "OpcodeToName": return api.OpcodeToName(I(a, "activeId"));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);
@@ -86,6 +105,9 @@ internal static class Calls
     internal static List<string> Strings(JsonObject a, string k) => a[k]!.AsArray().Select(x => (string)x!).ToList();
 
     internal static List<long> Longs(JsonObject a, string k) => a[k]!.AsArray().Select(x => J.Long(x)).ToList();
+
+    internal static JsonObject Nested(Dictionary<string, Dictionary<string, double>> d) =>
+        new(d.Select(x => KeyValuePair.Create(x.Key, (JsonNode?)new JsonObject(x.Value.Select(y => KeyValuePair.Create(y.Key, (JsonNode?)y.Value))))));
 
     internal static JsonArray Items(IEnumerable<KeyValuePair<string, int>> items) =>
         new(items.Select(p => (JsonNode?)new JsonArray(p.Key, p.Value)).ToArray());

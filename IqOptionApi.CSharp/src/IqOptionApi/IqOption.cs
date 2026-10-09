@@ -627,5 +627,261 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Assets & market info
+
+    private const string FinancialQuery =
+        "query GetAssetProfileInfo($activeId:ActiveID!, $locale: LocaleName){\n active(id: $activeId) {\n id\n name(source: TradeRoom, locale: $locale)\n ticker\n media {\n siteBackground\n }\n charts {\n dtd {\n change\n }\n m1 {\n change\n }\n y1 {\n change\n }\n ytd {\n change\n }\n }\n index_fininfo: fininfo {\n ... on Index {\n description(locale: $locale)\n }\n }\n fininfo {\n ... on Pair {\n type\n description(locale: $locale)\n currency {\n name(locale: $locale)\n }\n base {\n name(locale: $locale)\n ... on Stock {\n company {\n country {\n nameShort\n }\n gics {\n sector\n industry\n }\n site\n domain\n }\n keyStat {\n marketCap\n peRatioHigh\n }\n }\n ... on CryptoCurrency {\n site\n domain\n coinsInCirculation\n maxCoinsQuantity\n volume24h\n marketCap\n }\n }\n }\n }\n }\n }";
+
+    private static JsonNode? Path(JsonNode? node, params string[] keys)
+    {
+        foreach (string key in keys) node = (node as JsonObject)?[key];
+        return node;
+    }
+
+    /// <summary>Sends <paramref name="msg"/> and re-sends it every <paramref name="interval"/> until a <paramref name="reply"/> arrives (Python retry loops).</summary>
+    private async Task<JsonObject> ResendUntilAsync(string reply, object msg, TimeSpan interval, TimeSpan total, CancellationToken ct)
+    {
+        var gate = _conn.Gate(reply);
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            using var w = _conn.AddWaiter(reply, null);
+            var clock = Stopwatch.StartNew();
+            while (true)
+            {
+                await Send("sendMessage", msg, "", ct).ConfigureAwait(false);
+                var left = total - clock.Elapsed;
+                if (left <= TimeSpan.Zero) throw new TimeoutException($"no '{reply}' reply");
+                try
+                {
+                    return await w.Task.WaitAsync(interval < left ? interval : left, ct).ConfigureAwait(false);
+                }
+                catch (TimeoutException) when (clock.Elapsed < total)
+                {
+                    // no answer yet: send again, like Python
+                }
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Asset name → id table used by every method (Python <c>get_all_ACTIVES_OPCODE</c>).</summary>
+    public IReadOnlyDictionary<string, int> GetAllActives() => _actives.Snapshot();
+
+    /// <summary>Adds/updates binary and turbo assets from the init data (Python <c>update_ACTIVES_OPCODE</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UpdateActivesAsync(CancellationToken ct = default)
+    {
+        var init = await GetAllInitAsync(ct).ConfigureAwait(false) ?? throw new TimeoutException("get-initialization-data did not answer");
+        foreach (string group in new[] { "binary", "turbo" })
+        {
+            foreach (var (key, node) in J.Obj(J.Obj(init[group])["actives"]))
+            {
+                var a = J.Obj(node);
+                if (J.Str(a["exchange"]) == "" || J.Str(a["provider"]) == "OTC")
+                    _actives.Set(J.Str(a["ticker"])!, int.Parse(key, CultureInfo.InvariantCulture));
+            }
+        }
+    }
+
+    /// <summary>Adds/updates digital assets (Python <c>get_All_Digital_ACTIVES_OPCODE</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UpdateDigitalActivesAsync(CancellationToken ct = default)
+    {
+        var data = await GetDigitalUnderlyingListAsync(ct).ConfigureAwait(false) ?? throw new TimeoutException("underlying list did not answer");
+        foreach (var n in J.Arr(data["underlying"])) _actives.Set(J.Str(n!["name"])!, (int)J.Long(n["active_id"]));
+    }
+
+    /// <summary>Adds/updates forex/cfd/crypto assets (Python <c>instruments_input_to_ACTIVES</c>; null = crypto, forex, cfd).</summary>
+    /// <param name="instrumentType">"crypto", "forex", "cfd" or null for all three.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UpdateMarginActivesAsync(string? instrumentType = null, CancellationToken ct = default)
+    {
+        foreach (string type in instrumentType != null ? new[] { instrumentType } : new[] { "crypto", "forex", "cfd" })
+        {
+            foreach (var n in J.Arr((await GetInstrumentsAsync(type, ct).ConfigureAwait(false))["instruments"]))
+                _actives.Set(J.Str(n!["id"])!, (int)J.Long(n["active_id"]));
+        }
+    }
+
+    /// <summary>Asset name for an id (Python <c>opcode_to_name</c>); null if unknown.</summary>
+    /// <param name="activeId">Asset id.</param>
+    public string? OpcodeToName(int activeId) => _actives.NameOf(activeId);
+
+    /// <summary>Display name of an asset (Python <c>get_name_by_activeId</c>).</summary>
+    /// <param name="activeId">Asset id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<string?> GetNameByActiveIdAsync(int activeId, CancellationToken ct = default) =>
+        J.Str(Path(await GetFinancialInformationAsync(activeId, ct).ConfigureAwait(false), "msg", "data", "active", "name"));
+
+    /// <summary>Asset profile (Python <c>get_financial_information</c>); returns the whole message.</summary>
+    /// <param name="activeId">Asset id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetFinancialInformationAsync(int activeId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        return await ByName("financial-information", new Obj
+        {
+            ["name"] = "get-financial-information",
+            ["version"] = "1.0",
+            ["body"] = new Obj { ["query"] = FinancialQuery, ["operationName"] = "GetAssetProfileInfo", ["variables"] = new Obj { ["activeId"] = activeId } },
+        }, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Instruments of a type (Python <c>get_instruments</c>; re-asks every 10 s until answered).</summary>
+    /// <param name="instrumentType">"crypto", "forex" or "cfd".</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetInstrumentsAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var r = await ResendUntilAsync("instruments", new Obj
+        {
+            ["name"] = "get-instruments", ["version"] = "4.0", ["body"] = new Obj { ["type"] = instrumentType },
+        }, Scaled(10), T, ct).ConfigureAwait(false);
+        return J.Obj(r["msg"]);
+    }
+
+    /// <summary>Binary/turbo/blitz init data (Python <c>get_all_init_v2</c>); null after 30 s without answer.</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject?> GetAllInitAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        try
+        {
+            var r = await ResendUntilAsync("initialization-data", new Obj
+            {
+                ["name"] = "get-initialization-data", ["version"] = "3.0", ["body"] = new Obj(),
+            }, Scaled(3), TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            return J.Obj(r["msg"]);
+        }
+        catch (TimeoutException)
+        {
+            Log("get-initialization-data: no answer after 30 s");
+            return null;
+        }
+    }
+
+    /// <summary>Which assets are open right now, per type: binary, turbo, digital, cfd, forex, crypto (Python <c>get_all_open_time</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<Dictionary<string, Dictionary<string, bool>>> GetAllOpenTimeAsync(CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, Dictionary<string, bool>>();
+        var init = await GetAllInitAsync(ct).ConfigureAwait(false) ?? throw new TimeoutException("get-initialization-data did not answer");
+        foreach (string option in new[] { "binary", "turbo" })
+        {
+            foreach (var (_, node) in J.Obj(J.Obj(init[option])["actives"]))
+            {
+                var a = J.Obj(node);
+                string name = J.Str(a["name"])!.Split('.')[1];
+                State.GetOrAdd(result, option)[name] = J.IsTrue(a["enabled"]) && !J.IsTrue(a["is_suspended"]);
+            }
+        }
+        double now = Now;
+        var digital = await GetDigitalUnderlyingListAsync(ct).ConfigureAwait(false) ?? throw new TimeoutException("underlying list did not answer");
+        foreach (var d in J.Arr(digital["underlying"]))
+            State.GetOrAdd(result, "digital")[J.Str(d!["underlying"])!] = IsOpenNow(d["schedule"], now);
+        foreach (string type in new[] { "cfd", "forex", "crypto" })
+        {
+            foreach (var d in J.Arr((await GetInstrumentsAsync(type, ct).ConfigureAwait(false))["instruments"]))
+                State.GetOrAdd(result, type)[J.Str(d!["name"])!] = IsOpenNow(d["schedule"], now);
+        }
+        return result;
+    }
+
+    private static bool IsOpenNow(JsonNode? schedule, double now)
+    {
+        bool open = false;
+        foreach (var s in J.Arr(schedule))
+        {
+            if (J.Dbl(s!["open"]) < now && now < J.Dbl(s["close"])) open = true;
+        }
+        return open;
+    }
+
+    /// <summary>Turbo and binary details per asset name (Python <c>get_binary_option_detail</c>, data from the v2 init).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<Dictionary<string, Dictionary<string, JsonObject>>> GetBinaryOptionDetailAsync(CancellationToken ct = default)
+    {
+        var init = await GetAllInitAsync(ct).ConfigureAwait(false) ?? throw new TimeoutException("get-initialization-data did not answer");
+        var detail = new Dictionary<string, Dictionary<string, JsonObject>>();
+        foreach (string type in new[] { "turbo", "binary" })
+        {
+            foreach (var (_, node) in J.Obj(J.Obj(init[type])["actives"]))
+            {
+                var a = J.Obj(node);
+                string name = J.Str(a["name"])!;
+                int dot = name.IndexOf('.');
+                if (dot < 0) throw new FormatException($"unexpected active name '{name}'");
+                State.GetOrAdd(detail, name[(dot + 1)..])[type] = a;
+            }
+        }
+        return detail;
+    }
+
+    /// <summary>Payout fraction per ticker for turbo and binary, e.g. 0.87 (Python <c>get_all_profit_v2</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<Dictionary<string, Dictionary<string, double>>> GetAllProfitAsync(CancellationToken ct = default) =>
+        ProfitTable(await GetAllInitAsync(ct).ConfigureAwait(false), new[] { "turbo", "binary" });
+
+    /// <summary>Blitz payout fraction per ticker (Python <c>get_all_profit_blitz_v2</c>).</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<Dictionary<string, Dictionary<string, double>>> GetAllProfitBlitzAsync(CancellationToken ct = default) =>
+        ProfitTable(await GetAllInitAsync(ct).ConfigureAwait(false), new[] { "blitz" });
+
+    private static Dictionary<string, Dictionary<string, double>> ProfitTable(JsonObject? init, string[] types)
+    {
+        var all = new Dictionary<string, Dictionary<string, double>>();
+        if (init == null) return all;
+        foreach (string type in types)
+        {
+            if (init[type] is not JsonObject group) continue;
+            foreach (var (_, node) in J.Obj(group["actives"]))
+            {
+                var a = J.Obj(node);
+                if (J.Truthy(a["is_suspended"]) || !J.Truthy(a["enabled"])) continue;
+                State.GetOrAdd(all, J.Str(a["ticker"])!)[type] = Helpers.PayoutFraction(J.Dbl(Path(a, "option", "profit", "commission")));
+            }
+        }
+        return all;
+    }
+
+    /// <summary>Digital assets with schedules (Python <c>get_digital_underlying_list_data</c>); null after 30 s.</summary>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject?> GetDigitalUnderlyingListAsync(CancellationToken ct = default)
+    {
+        EnsureConnected();
+        try
+        {
+            var r = await _conn.RequestAsync("sendMessage", new Obj
+            {
+                ["name"] = "digital-option-instruments.get-underlying-list", ["version"] = "3.0", ["body"] = new Obj { ["type"] = "digital-option" },
+            }, "", "underlying-list", false, TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            return J.Obj(r["msg"]);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Top assets of a type (Python <c>get_top_asset</c>).</summary>
+    /// <param name="instrumentType">e.g. "forex", "digital-option".</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonNode?> GetTopAssetAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        var r = await ById("top-assets", new Obj
+        {
+            ["name"] = "get-top-assets", ["version"] = "1.2", ["body"] = new Obj { ["instrument_type"] = instrumentType },
+        }, rid, ct).ConfigureAwait(false);
+        return r["msg"];
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }
