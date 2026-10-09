@@ -13,6 +13,9 @@ public sealed class IqOption : IAsyncDisposable
 {
     private static readonly string[] PortfolioTypes = { "cfd", "forex", "crypto", "digital-option", "turbo-option", "binary-option" };
 
+    // Not in Python: the live server (checked Oct 2026) pushes blitz position-changed only to this subscription.
+    private static readonly string[] PositionTypes = PortfolioTypes.Append("blitz-option").ToArray();
+
     private static readonly string[] BillingSubscriptions =
     {
         "internal-billing.balance-created", "internal-billing.auth-balance-changed", "internal-billing.balance-changed",
@@ -213,7 +216,7 @@ public sealed class IqOption : IAsyncDisposable
             await SendRaw("sendMessage", new Obj { ["name"] = "get-balances", ["version"] = "1.0" }, ct).ConfigureAwait(false);
             foreach (var b in J.Arr(raw["msg"]))
             {
-                foreach (string ins in PortfolioTypes)
+                foreach (string ins in PositionTypes)
                 {
                     await SendRaw("subscribeMessage", new Obj
                     {
@@ -1397,7 +1400,7 @@ public sealed class IqOption : IAsyncDisposable
         }
     }
 
-    /// <summary>Waits until a binary/turbo option closes (Python <c>check_win_v3</c>); profit = payout − stake. Understands both the old
+    /// <summary>Waits until a binary/turbo/blitz option closes (Python <c>check_win_v3</c>); profit = payout − stake. Understands both the old
     /// <c>option-closed</c> message and the closed <c>position-changed</c> the live server sends today. No timeout: cancel with <paramref name="ct"/>.</summary>
     /// <param name="optionId">Id returned by <see cref="BuyAsync"/>.</param>
     /// <param name="ct">Cancellation.</param>

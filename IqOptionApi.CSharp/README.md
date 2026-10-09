@@ -2,7 +2,7 @@
 
 A C# (.NET 9) port of the Python **iqoptionapi** library (v9.4) in this repository.
 
-It is a **library**: there's no screen and no trading strategy. Your own bot or app references it and uses one class, `IqOption`, to log in, read prices and trade on IQ Option. Every message it sends is byte-for-byte what the Python library sends, and this is checked by tests generated from the Python code itself.
+It is a **library**: there's no screen and no trading strategy. Your own bot or app references it and uses one class, `IqOption`, to log in, read prices and trade on IQ Option. Every message it sends is byte-for-byte what the Python library sends (plus one blitz subscription Python is missing), and this is checked by tests generated from the Python code itself.
 
 > **Note.** IQ Option has no official public API. This library uses the same private protocol as their web app, so it can stop working when IQ Option changes that protocol. Automated trading may also conflict with IQ Option's terms of service. Using it is your decision.
 
@@ -76,10 +76,12 @@ Use an `-OTC` asset at weekends, when the normal markets are closed.
 | Login, balance, historic and live candles | ✅ |
 | Turbo buy + `CheckWinAsync` | ✅ |
 | Digital spot buy + `CheckWinDigitalAsync` | ✅ |
+| Blitz buy + `CheckWinAsync` | ✅ (with the `blitz-option` subscription, fix 11) |
 
 What the live server does differently from the Python code's assumptions:
 
 - **Closed binary/turbo options.** The server no longer sends `option-closed`, so Python's `check_win_v3` would wait forever. A closed option now arrives as a closed `position-changed`, and `CheckWinAsync` understands both.
+- **Blitz options.** Their `position-changed` messages (`instrument_type` `blitz-option`) are only pushed to clients that subscribe to `blitz-option`. Python never does, so a blitz result never arrives there. `ConnectAsync` adds this one subscription per balance; every other connect frame is still Python's.
 - **The `get-instruments` list (forex/CFD/crypto).** The server did not answer this request, so `GetInstrumentsAsync`, `UpdateMarginActivesAsync` and `GetAllOpenTimeAsync` time out. Python sends the same request and would hang.
 - **Asset availability changes.** Assets are suspended from time to time ("active is suspended"), and some digital names now end in `-op` (e.g. `EURUSD-op`). Use `GetAllInitAsync()` / `GetDigitalUnderlyingListAsync()` to see what is open, and `UpdateDigitalActivesAsync()` to learn new names.
 
@@ -174,7 +176,7 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 | `Task<(bool Success, JsonObject? Result, string? Error)> BuyByRawExpirationAsync(double amount, string asset, Direction direction, string optionType, long expired)` (+ overloads taking `int activeId` / `int optionTypeId`) | `buy_by_raw_expirations` (reports failures, fix 8) |
 | `Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds = 30)` | `buy_blitz` (same duration validation → `ArgumentOutOfRangeException`) |
 | `Task<JsonObject?> SellOptionAsync(IEnumerable<long> optionIds)` | `sell_option` (returns the `sold-options` reply if it arrives within the timeout, else null) |
-| `Task<(TradeResult Result, double Profit)> CheckWinAsync(long optionId)` | `check_win_v3` (+ `check_win_v2`, `get_betinfo`): waits for `option-closed`, profit = `profit_amount − amount` |
+| `Task<(TradeResult Result, double Profit)> CheckWinAsync(long optionId)` | `check_win_v3` (+ `check_win_v2`, `get_betinfo`): waits for `option-closed` or a closed `position-changed`, profit = payout − stake; works for binary, turbo and blitz |
 | `Task<JsonObject> GetOptionInfoAsync(int limit)` | `get_optioninfo`, `get_optioninfo_v2` (v2 frame) |
 | `int GetRemainingTime(int minutes, double? timestamp = null)` | `get_remaning` (invalid duration → `ArgumentOutOfRangeException`) |
 | `IReadOnlyDictionary<long,JsonObject> GetOptionOpenByOtherPc()` / `void DelOptionOpenByOtherPc(long id)` | same names |
@@ -244,7 +246,7 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 ## Differences from Python
 
 ### Copied exactly
-- All outgoing frames byte-for-byte , including `request_id` values and Python's odd-but-working payloads.
+- All outgoing frames byte-for-byte (apart from the extra blitz subscription, fix 11), including `request_id` values and Python's odd-but-working payloads.
 - Expiry maths: `get_expiration_time` , `get_remaning_time` , digital spot expiry and instrument-id formatting , strike-list expiry .
 - Formulas: payout `(100 − commission) / 100`; blitz `profit_percent = (int)(fraction * 100)` (double truncation); digital profit `((100 − ask) * 100) / ask`; strike key `"%.6f" % (value * 10e-7)`; `check_win` rounding = `Math.Round(x, 2, MidpointRounding.ToEven)`; digital sell-back value including the always-false call flag.
 - Candle buffer eviction (`dict_queue_add`), live-deal deque semantics, insertion-ordered asset table with first-name-wins reverse lookup.
@@ -262,6 +264,7 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 8. `BuyByRawExpirationAsync` reports failures.
 9. `CloseAsync` / `DisposeAsync` really stop (no hidden auto-reconnect of the closed socket); proxy/TLS settings are kept on reconnect.
 10. SSL certificates are verified (opt-out: `IgnoreCertificateErrors`).
+11. Blitz results arrive: `ConnectAsync` also subscribes `portfolio.position-changed` for `blitz-option` (the only extra outgoing frame).
 
 ### Known quirk kept on purpose
 `GetDigitalSpotProfitAfterSaleAsync` computes calls with the put formula, as Python does. Without IQ Option reference numbers we cannot prove which is correct; documented in the README.
