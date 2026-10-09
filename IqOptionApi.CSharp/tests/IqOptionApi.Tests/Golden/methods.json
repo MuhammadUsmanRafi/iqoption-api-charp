@@ -5757,6 +5757,530 @@
    ],
    "result": null,
    "compare_result": true
+  },
+  {
+   "name": "buy_turbo_1m",
+   "csharp": {
+    "method": "BuyAsync",
+    "args": {
+     "amount": 1,
+     "asset": "EURUSD",
+     "direction": "call",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 1, \"active_id\": 1861, \"expired\": 1791549060, \"direction\": \"call\", \"option_type_id\": 3, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    12345
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_turbo_5m_put",
+   "csharp": {
+    "method": "BuyAsync",
+    "args": {
+     "amount": 2.5,
+     "asset": "EURUSD-OTC",
+     "direction": "put",
+     "minutes": 5
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 2.5, \"active_id\": 76, \"expired\": 1791549300, \"direction\": \"put\", \"option_type_id\": 3, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    12345
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_binary_15m",
+   "csharp": {
+    "method": "BuyAsync",
+    "args": {
+     "amount": 10,
+     "asset": "GBPUSD",
+     "direction": "call",
+     "minutes": 15
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 10, \"active_id\": 1867, \"expired\": 1791549900, \"direction\": \"call\", \"option_type_id\": 1, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    12345
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_rejected",
+   "csharp": {
+    "method": "BuyAsync",
+    "args": {
+     "amount": 1,
+     "asset": "EURUSD",
+     "direction": "call",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "message": "Not enough money",
+        "result": false
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 1, \"active_id\": 1861, \"expired\": 1791549060, \"direction\": \"call\", \"option_type_id\": 3, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    false,
+    "Not enough money"
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_multi",
+   "csharp": {
+    "method": "BuyMultiAsync",
+    "args": {
+     "amounts": [
+      1,
+      2
+     ],
+     "assets": [
+      "EURUSD",
+      "EURUSD-OTC"
+     ],
+     "directions": [
+      "call",
+      "put"
+     ],
+     "minutes": [
+      1,
+      2
+     ]
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 1, \"active_id\": 1861, \"expired\": 1791549060, \"direction\": \"call\", \"option_type_id\": 3, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 2, \"active_id\": 76, \"expired\": 1791549120, \"direction\": \"put\", \"option_type_id\": 3, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"3\"}"
+   ],
+   "result": [
+    12345,
+    12345
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_by_raw_expiration",
+   "csharp": {
+    "method": "BuyByRawExpirationAsync",
+    "args": {
+     "amount": 1,
+     "asset": "EURUSD",
+     "direction": "put",
+     "optionType": "binary",
+     "expired": 1791549920
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"price\": 1, \"active_id\": 1861, \"expired\": 1791549920, \"direction\": \"put\", \"option_type_id\": 1, \"user_balance_id\": 10004}, \"name\": \"binary-options.open-option\", \"version\": \"1.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    {
+     "id": 12345
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "buy_blitz",
+   "csharp": {
+    "method": "BuyBlitzAsync",
+    "args": {
+     "amount": 1,
+     "asset": "EURUSD-OTC",
+     "direction": "call",
+     "seconds": 30
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-initialization-data",
+     "reply": [
+      {
+       "name": "initialization-data",
+       "request_id": "$RID",
+       "msg": {
+        "binary": {
+         "actives": {
+          "1861": {
+           "name": "front.EURUSD",
+           "ticker": "EURUSD",
+           "enabled": true,
+           "is_suspended": false,
+           "exchange": "",
+           "provider": "",
+           "option": {
+            "profit": {
+             "commission": 20
+            }
+           }
+          },
+          "76": {
+           "name": "front.EURUSD-OTC",
+           "ticker": "EURUSD-OTC",
+           "enabled": true,
+           "is_suspended": true,
+           "exchange": "x",
+           "provider": "OTC",
+           "option": {
+            "profit": {
+             "commission": 15
+            }
+           }
+          }
+         }
+        },
+        "turbo": {
+         "actives": {
+          "1861": {
+           "name": "front.EURUSD",
+           "ticker": "EURUSD",
+           "enabled": true,
+           "is_suspended": false,
+           "exchange": "",
+           "provider": "",
+           "option": {
+            "profit": {
+             "commission": 13
+            }
+           }
+          },
+          "9999": {
+           "name": "front.NEWASSET",
+           "ticker": "NEWASSET",
+           "enabled": false,
+           "is_suspended": false,
+           "exchange": "",
+           "provider": "",
+           "option": {
+            "profit": {
+             "commission": 30
+            }
+           }
+          }
+         }
+        },
+        "blitz": {
+         "actives": {
+          "76": {
+           "name": "front.EURUSD-OTC",
+           "ticker": "EURUSD-OTC",
+           "enabled": true,
+           "is_suspended": false,
+           "exchange": "",
+           "provider": "OTC",
+           "option": {
+            "profit": {
+             "commission": 43
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     ]
+    },
+    {
+     "on": "sendMessage:binary-options.open-option",
+     "reply": [
+      {
+       "name": "option",
+       "request_id": "$RID",
+       "msg": {
+        "id": 12345
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-initialization-data\", \"version\": \"3.0\", \"body\": {}}, \"request_id\": \"\"}",
+    "{\"name\": \"sendMessage\", \"msg\": {\"body\": {\"user_balance_id\": 10004, \"active_id\": 76, \"option_type_id\": 12, \"direction\": \"call\", \"expired\": 1791549050, \"price\": 1, \"profit_percent\": 56, \"expiration_size\": 30}, \"name\": \"binary-options.open-option\", \"version\": \"2.0\"}, \"request_id\": \"2\"}"
+   ],
+   "result": [
+    true,
+    {
+     "id": 12345
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "sell_option",
+   "csharp": {
+    "method": "SellOptionAsync",
+    "args": {
+     "ids": [
+      12345,
+      12346
+     ]
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:sell-options",
+     "reply": [
+      {
+       "name": "sold-options",
+       "request_id": "$RID",
+       "msg": {}
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"sell-options\", \"version\": \"2.0\", \"body\": {\"options_ids\": [12345, 12346]}}, \"request_id\": \"2\"}"
+   ],
+   "result": null,
+   "compare_result": false
+  },
+  {
+   "name": "check_win",
+   "csharp": {
+    "method": "CheckWinAsync",
+    "args": {
+     "id": 12345
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "option-closed",
+     "msg": {
+      "option_id": 12345,
+      "amount": 1,
+      "profit_amount": 1.85
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": 0.8500000000000001,
+   "compare_result": true
+  },
+  {
+   "name": "get_option_info",
+   "csharp": {
+    "method": "GetOptionInfoAsync",
+    "args": {
+     "limit": 10
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-options",
+     "reply": [
+      {
+       "name": "options",
+       "request_id": "",
+       "msg": {
+        "options": [
+         {
+          "id": 1
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-options\", \"body\": {\"limit\": 10, \"instrument_type\": \"binary,turbo\", \"user_balance_id\": 10004}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "name": "options",
+    "request_id": "",
+    "msg": {
+     "options": [
+      {
+       "id": 1
+      }
+     ]
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_remaining_1",
+   "csharp": {
+    "method": "GetRemainingTime",
+    "args": {
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [],
+   "result": 40,
+   "compare_result": true
+  },
+  {
+   "name": "get_remaining_30",
+   "csharp": {
+    "method": "GetRemainingTime",
+    "args": {
+     "minutes": 30
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [],
+   "result": 1780,
+   "compare_result": true
+  },
+  {
+   "name": "option_open_by_other_pc",
+   "csharp": {
+    "method": "GetOptionOpenByOtherPc",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "binary-options",
+      "status": "open",
+      "external_id": 901,
+      "raw_event": {}
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "901": {
+     "name": "position-changed",
+     "microserviceName": "portfolio",
+     "msg": {
+      "source": "binary-options",
+      "status": "open",
+      "external_id": 901,
+      "raw_event": {}
+     }
+    }
+   },
+   "compare_result": true
   }
  ]
 }

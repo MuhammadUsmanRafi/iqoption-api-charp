@@ -61,6 +61,35 @@ internal static class Calls
             case "StopCandlesStreamAsync": await api.StopCandlesStreamAsync(S(a, "asset"), I(a, "size")); return null;
             case "StopAllCandlesStreamsAsync": await api.StopAllCandlesStreamsAsync(S(a, "asset")); return null;
 
+            case "BuyAsync":
+            {
+                var (ok, id, err) = await api.BuyAsync(D(a, "amount"), S(a, "asset"), Dir(a), I(a, "minutes"));
+                return Tuple(ok, ok ? (object)id : err);
+            }
+            case "BuyMultiAsync":
+                return new JsonArray((await api.BuyMultiAsync(
+                        a["amounts"]!.AsArray().Select(x => J.Dbl(x)).ToList(),
+                        Strings(a, "assets"),
+                        Strings(a, "directions").Select(d => d == "call" ? Direction.Call : Direction.Put).ToList(),
+                        a["minutes"]!.AsArray().Select(x => (int)J.Long(x)).ToList()))
+                    .Select(x => ToNode(x)).ToArray());
+            case "BuyByRawExpirationAsync":
+            {
+                var (ok, res, err) = await api.BuyByRawExpirationAsync(D(a, "amount"), S(a, "asset"), Dir(a), S(a, "optionType"), L(a, "expired"));
+                return Tuple(ok, ok ? (object?)res : err);
+            }
+            case "BuyBlitzAsync":
+            {
+                var (ok, res, err) = await api.BuyBlitzAsync(D(a, "amount"), S(a, "asset"), Dir(a), I(a, "seconds"));
+                return Tuple(ok, ok ? (object?)res : err);
+            }
+            case "SellOptionAsync": await api.SellOptionAsync(Longs(a, "ids")); return null;
+            case "CheckWinAsync": return (await api.CheckWinAsync(L(a, "id"))).Profit;
+            case "GetOptionInfoAsync": return await api.GetOptionInfoAsync(I(a, "limit"));
+            case "GetRemainingTime": return api.GetRemainingTime(I(a, "minutes"));
+            case "GetOptionOpenByOtherPc":
+                return new JsonObject(api.GetOptionOpenByOtherPc().Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value.DeepClone())));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);

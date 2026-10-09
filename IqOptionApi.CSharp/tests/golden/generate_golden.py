@@ -523,6 +523,51 @@ def build_cases():
          "setup_csharp": "all_size_check:EURUSD", "call": lambda iq: iq.stop_candles_stream("EURUSD", "all"),
          "csharp": {"method": "StopAllCandlesStreamsAsync", "args": {"asset": "EURUSD"}}},
     ]
+    OPTION_OK = {"on": "sendMessage:binary-options.open-option",
+                 "reply": [{"name": "option", "request_id": "$RID", "msg": {"id": 12345}}]}
+
+    def buy_args(amount, asset, direction, minutes):
+        return {"method": "BuyAsync", "args": {"amount": amount, "asset": asset, "direction": direction, "minutes": minutes}}
+
+    cases += [
+        {"name": "buy_turbo_1m", "call": lambda iq: iq.buy(1, "EURUSD", "call", 1), "rules": [OPTION_OK],
+         "csharp": buy_args(1, "EURUSD", "call", 1)},
+        {"name": "buy_turbo_5m_put", "call": lambda iq: iq.buy(2.5, "EURUSD-OTC", "put", 5), "rules": [OPTION_OK],
+         "csharp": buy_args(2.5, "EURUSD-OTC", "put", 5)},
+        {"name": "buy_binary_15m", "call": lambda iq: iq.buy(10, "GBPUSD", "call", 15), "rules": [OPTION_OK],
+         "csharp": buy_args(10, "GBPUSD", "call", 15)},
+        {"name": "buy_rejected", "call": lambda iq: iq.buy(1, "EURUSD", "call", 1),
+         "rules": [{"on": "sendMessage:binary-options.open-option",
+                    "reply": [{"name": "option", "request_id": "$RID", "msg": {"message": "Not enough money", "result": False}}]}],
+         "csharp": buy_args(1, "EURUSD", "call", 1)},
+        {"name": "buy_multi", "call": lambda iq: iq.buy_multi([1, 2], ["EURUSD", "EURUSD-OTC"], ["call", "put"], [1, 2]),
+         "rules": [OPTION_OK],
+         "csharp": {"method": "BuyMultiAsync", "args": {"amounts": [1, 2], "assets": ["EURUSD", "EURUSD-OTC"],
+                                                       "directions": ["call", "put"], "minutes": [1, 2]}}},
+        {"name": "buy_by_raw_expiration", "call": lambda iq: iq.buy_by_raw_expirations(1, "EURUSD", "put", "binary", T + 900),
+         # Python bug: api.py never imports Buyv3_by_raw_expired (NameError); supply it so Python's own code runs.
+         "setup": lambda iq, api: setattr(__import__("iqoptionapi.api", fromlist=["x"]), "Buyv3_by_raw_expired",
+                                          __import__("iqoptionapi.ws.chanels.buyv3", fromlist=["x"]).Buyv3_by_raw_expired),
+         "rules": [OPTION_OK],
+         "csharp": {"method": "BuyByRawExpirationAsync",
+                    "args": {"amount": 1, "asset": "EURUSD", "direction": "put", "optionType": "binary", "expired": T + 900}}},
+        {"name": "buy_blitz", "call": lambda iq: iq.buy_blitz(1, "EURUSD-OTC", "call", 30), "rules": [INIT_RULE, OPTION_OK],
+         "csharp": {"method": "BuyBlitzAsync", "args": {"amount": 1, "asset": "EURUSD-OTC", "direction": "call", "seconds": 30}}},
+        {"name": "sell_option", "call": lambda iq: iq.sell_option([12345, 12346]),
+         "rules": [{"on": "sendMessage:sell-options", "reply": [{"name": "sold-options", "request_id": "$RID", "msg": {}}]}],
+         "csharp": {"method": "SellOptionAsync", "args": {"ids": [12345, 12346]}}, "compare_result": False},
+        {"name": "check_win", "pre": [{"name": "option-closed", "msg": {"option_id": 12345, "amount": 1, "profit_amount": 1.85}}],
+         "call": lambda iq: iq.check_win_v3(12345, 0.01), "csharp": {"method": "CheckWinAsync", "args": {"id": 12345}}},
+        {"name": "get_option_info", "call": lambda iq: iq.get_optioninfo_v2(10),
+         "rules": [{"on": "sendMessage:get-options", "reply": [{"name": "options", "request_id": "", "msg": {"options": [{"id": 1}]}}]}],
+         "csharp": {"method": "GetOptionInfoAsync", "args": {"limit": 10}}},
+        {"name": "get_remaining_1", "call": lambda iq: iq.get_remaning(1), "csharp": {"method": "GetRemainingTime", "args": {"minutes": 1}}},
+        {"name": "get_remaining_30", "call": lambda iq: iq.get_remaning(30), "csharp": {"method": "GetRemainingTime", "args": {"minutes": 30}}},
+        {"name": "option_open_by_other_pc",
+         "pre": [{"name": "position-changed", "microserviceName": "portfolio",
+                  "msg": {"source": "binary-options", "status": "open", "external_id": 901, "raw_event": {}}}],
+         "call": lambda iq: iq.get_option_open_by_other_pc(), "csharp": {"method": "GetOptionOpenByOtherPc", "args": {}}},
+    ]
     # @@CASES@@
     return cases
 

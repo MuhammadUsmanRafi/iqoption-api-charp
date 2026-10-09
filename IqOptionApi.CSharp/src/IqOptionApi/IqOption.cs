@@ -1061,5 +1061,282 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Binary / Turbo / Blitz
+
+    private Obj BuyFrame(double amount, int activeId, Direction direction, int minutes)
+    {
+        double now = Now;
+        var (exp, index) = Helpers.GetExpirationTime((long)now, minutes, now, _tz);
+        return new Obj
+        {
+            ["body"] = new Obj
+            {
+                ["price"] = amount,
+                ["active_id"] = activeId,
+                ["expired"] = exp,
+                ["direction"] = Helpers.DirectionText(direction),
+                ["option_type_id"] = index < 5 ? 3 : 1,
+                ["user_balance_id"] = Bal,
+            },
+            ["name"] = "binary-options.open-option",
+            ["version"] = "1.0",
+        };
+    }
+
+    private static (bool, JsonObject?, string?) OptionReply(JsonObject reply)
+    {
+        var m = J.Obj(reply["msg"]);
+        return m.ContainsKey("message") ? (false, null, J.Str(m["message"])) : (true, m, null);
+    }
+
+    /// <summary>Buys a turbo (1–5 min) or binary (15+ min) option (Python <c>buy</c>).</summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="asset">Asset name, e.g. "EURUSD".</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="minutes">Expiry in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns><c>(true, optionId, null)</c> or <c>(false, 0, error)</c>.</returns>
+    public async Task<(bool Success, long Id, string? Error)> BuyAsync(double amount, string asset, Direction direction, int minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        int activeId = Act(asset);
+        string rid = NextRid();
+        try
+        {
+            var (ok, m, error) = OptionReply(await ById("option", BuyFrame(amount, activeId, direction, minutes), rid, ct).ConfigureAwait(false));
+            return ok ? (true, J.Long(m!["id"]), null) : (false, 0, error);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, 0, Reason(ex));
+        }
+    }
+
+    /// <summary>Buys several options at once (Python <c>buy_multi</c>); null where a buy failed.</summary>
+    /// <param name="amounts">Stakes.</param>
+    /// <param name="assets">Asset names.</param>
+    /// <param name="directions">Directions.</param>
+    /// <param name="minutes">Expiries in minutes.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<List<long?>> BuyMultiAsync(IList<double> amounts, IList<string> assets, IList<Direction> directions, IList<int> minutes, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        if (amounts.Count != assets.Count || assets.Count != directions.Count || directions.Count != minutes.Count)
+            throw new ArgumentException("All lists must have the same length.");
+        var activeIds = assets.Select(Act).ToList();
+        var rids = amounts.Select(_ => NextRid()).ToList();
+        var waiters = rids.Select(r => _conn.AddWaiter("option", r)).ToList();
+        try
+        {
+            for (int i = 0; i < rids.Count; i++)
+                await Send("sendMessage", BuyFrame(amounts[i], activeIds[i], directions[i], minutes[i]), rids[i], ct).ConfigureAwait(false);
+            var ids = new List<long?>();
+            foreach (var w in waiters)
+            {
+                try
+                {
+                    var (ok, m, _) = OptionReply(await w.Task.WaitAsync(T, ct).ConfigureAwait(false));
+                    ids.Add(ok ? J.Long(m!["id"]) : null);
+                }
+                catch (Exception ex) when (IsFailure(ex))
+                {
+                    ids.Add(null);
+                }
+            }
+            return ids;
+        }
+        finally
+        {
+            foreach (var w in waiters) w.Dispose();
+        }
+    }
+
+    /// <summary>Buys with an exact expiry timestamp (Python <c>buy_by_raw_expirations</c>); <paramref name="optionType"/> is "turbo" or "binary".</summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="optionType">"turbo" or "binary".</param>
+    /// <param name="expired">Expiry (Unix seconds).</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, JsonObject? Result, string? Error)> BuyByRawExpirationAsync(double amount, string asset, Direction direction, string optionType, long expired, CancellationToken ct = default) =>
+        BuyByRawExpirationAsync(amount, Act(asset), direction, optionType switch
+        {
+            "turbo" => 3,
+            "binary" => 1,
+            _ => throw new ArgumentException("optionType must be \"turbo\" or \"binary\"", nameof(optionType)),
+        }, expired, ct);
+
+    /// <summary>Buys with an exact expiry and raw ids (Python <c>buy_by_raw_expirations</c> with an int active and option).</summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="activeId">Asset id.</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="optionTypeId">3 = turbo, 1 = binary.</param>
+    /// <param name="expired">Expiry (Unix seconds).</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Result, string? Error)> BuyByRawExpirationAsync(double amount, int activeId, Direction direction, int optionTypeId, long expired, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            return OptionReply(await ById("option", new Obj
+            {
+                ["body"] = new Obj
+                {
+                    ["price"] = amount,
+                    ["active_id"] = activeId,
+                    ["expired"] = expired,
+                    ["direction"] = Helpers.DirectionText(direction),
+                    ["option_type_id"] = optionTypeId,
+                    ["user_balance_id"] = Bal,
+                },
+                ["name"] = "binary-options.open-option",
+                ["version"] = "1.0",
+            }, rid, ct).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null, Reason(ex));
+        }
+    }
+
+    /// <summary>Buys a blitz option (Python <c>buy_blitz</c>): OTC 30–300 s, others 60–900 s.</summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="durationSeconds">Expiry in seconds.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds = 30, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        long? balance = GetBalanceId();
+        int activeId = Act(asset);
+        bool otc = asset.ToUpperInvariant().EndsWith("-OTC", StringComparison.Ordinal);
+        var (min, max) = otc ? (30, 300) : (60, 900);
+        if (durationSeconds < min || durationSeconds > max)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), $"Blitz expiry for {(otc ? "OTC" : "normal")} pairs must be between {min}s and {max}s. You gave: {durationSeconds}");
+        double expired = Now + durationSeconds;
+        int profitPercent = 0;
+        var blitz = await GetAllProfitBlitzAsync(ct).ConfigureAwait(false);
+        if (blitz.TryGetValue(asset, out var p) && p.TryGetValue("blitz", out double fraction)) profitPercent = Helpers.BlitzPercent(fraction);
+        try
+        {
+            return OptionReply(await ById("option", new Obj
+            {
+                ["body"] = new Obj
+                {
+                    ["user_balance_id"] = balance,
+                    ["active_id"] = activeId,
+                    ["option_type_id"] = 12,
+                    ["direction"] = Helpers.DirectionText(direction),
+                    ["expired"] = (long)expired,
+                    ["price"] = amount,
+                    ["profit_percent"] = profitPercent,
+                    ["expiration_size"] = durationSeconds,
+                },
+                ["name"] = "binary-options.open-option",
+                ["version"] = "2.0",
+            }, rid, ct).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null, Reason(ex));
+        }
+    }
+
+    /// <summary>Sells options early (Python <c>sell_option</c>); returns the server's reply, or null if none came.</summary>
+    /// <param name="optionIds">Option ids.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject?> SellOptionAsync(IEnumerable<long> optionIds, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        try
+        {
+            return await ById("sold-options", new Obj
+            {
+                ["name"] = "sell-options", ["version"] = "2.0", ["body"] = new Obj { ["options_ids"] = optionIds.ToList() },
+            }, rid, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Waits until a binary/turbo option closes (Python <c>check_win_v3</c>); profit = payout − stake. No timeout: cancel with <paramref name="ct"/>.</summary>
+    /// <param name="optionId">Id returned by <see cref="BuyAsync"/>.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(TradeResult Result, double Profit)> CheckWinAsync(long optionId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _pendingBinary.Add(optionId);
+        try
+        {
+            double? profit = null;
+            await _conn.WaitUntilAsync(() => (profit = ClosedProfit(optionId)) != null, null, ct).ConfigureAwait(false);
+            return (Helpers.ResultOf(profit!.Value), profit.Value);
+        }
+        finally
+        {
+            lock (_track) _pendingBinary.Remove(optionId);
+        }
+    }
+
+    private double? ClosedProfit(long optionId)
+    {
+        lock (_s.Lock)
+        {
+            if (_s.OrderAsync.TryGetValue(optionId, out var d) && d.TryGetValue("option-closed", out var closed))
+            {
+                var m = J.Obj(closed["msg"]);
+                return J.Dbl(m["profit_amount"]) - J.Dbl(m["amount"]);
+            }
+        }
+        lock (_track) return _recovered.TryGetValue(optionId, out double p) ? p : null;
+    }
+
+    /// <summary>Recent binary/turbo options (Python <c>get_optioninfo_v2</c>); the whole message.</summary>
+    /// <param name="limit">How many.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetOptionInfoAsync(int limit, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        return await ByName("options", new Obj
+        {
+            ["name"] = "get-options",
+            ["body"] = new Obj { ["limit"] = limit, ["instrument_type"] = "binary,turbo", ["user_balance_id"] = Bal },
+        }, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Seconds left to buy with this expiry (Python <c>get_remaning</c>): 1–5, 15, 30, … 165 minutes. Buy before (remaining − 30).</summary>
+    /// <param name="minutes">Expiry label.</param>
+    /// <param name="timestamp">Time to calculate from; null = server time.</param>
+    public int GetRemainingTime(int minutes, double? timestamp = null)
+    {
+        double now = Now;
+        foreach (var (label, seconds) in Helpers.GetRemainingTime(timestamp ?? now, now, _tz))
+        {
+            if (label == minutes) return (int)seconds;
+        }
+        throw new ArgumentOutOfRangeException(nameof(minutes), minutes, "Valid values: 1-5, 15, 30, ..., 165.");
+    }
+
+    /// <summary>Binary options opened on any device, by id (Python <c>get_option_open_by_other_pc</c>).</summary>
+    public IReadOnlyDictionary<long, JsonObject> GetOptionOpenByOtherPc()
+    {
+        lock (_s.Lock) return new Dictionary<long, JsonObject>(_s.OptionOpened);
+    }
+
+    /// <summary>Forgets one entry of <see cref="GetOptionOpenByOtherPc"/>.</summary>
+    /// <param name="id">Option id.</param>
+    public void DelOptionOpenByOtherPc(long id)
+    {
+        lock (_s.Lock) _s.OptionOpened.Remove(id);
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }
