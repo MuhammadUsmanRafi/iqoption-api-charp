@@ -21,6 +21,7 @@ internal sealed class FakeIqServer : IAsyncDisposable
     private WebSocket? _current;
     private int _logins;
     private int _connections;
+    private readonly ConcurrentDictionary<string, bool> _dropOn = new();
 
     private FakeIqServer(WebApplication app) => _app = app;
 
@@ -63,6 +64,9 @@ internal sealed class FakeIqServer : IAsyncDisposable
     public string[] FramesNamed(string key) => Frames.Where(f => Rule.KeyOf(JsonNode.Parse(f)!.AsObject()) == key).ToArray();
 
     public void Drop() => _current?.Abort();
+
+    /// <summary>Abort the socket (without answering) the next time a frame with this key arrives.</summary>
+    public void DropOnNext(string key) => _dropOn[key] = true;
 
     public async Task PushAsync(string json)
     {
@@ -120,6 +124,11 @@ internal sealed class FakeIqServer : IAsyncDisposable
                 while (!r.EndOfMessage);
                 string text = Encoding.UTF8.GetString(ms.ToArray());
                 Frames.Enqueue(text);
+                if (_dropOn.TryRemove(Rule.KeyOf(JsonNode.Parse(text)!.AsObject()), out _))
+                {
+                    ws.Abort();
+                    return;
+                }
                 List<Rule> rules;
                 lock (_rules) rules = _rules.ToList();
                 foreach (string reply in Rule.RepliesFor(JsonNode.Parse(text)!.AsObject(), rules)) await SendAsync(ws, reply);

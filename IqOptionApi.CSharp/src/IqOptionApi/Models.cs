@@ -177,6 +177,9 @@ public sealed class IqOptionOptions
     /// <summary>How long a request waits for its reply.</summary>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>Treat the connection as dropped when nothing arrives for this long (the server normally pushes time updates every second).</summary>
+    public TimeSpan ReceiveTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
     /// <summary>Waits between reconnect attempts (last one repeats); null = 1, 2, 5, 10, 30 seconds.</summary>
     public IReadOnlyList<TimeSpan>? ReconnectDelays { get; set; }
 

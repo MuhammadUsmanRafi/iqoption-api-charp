@@ -63,8 +63,12 @@ internal sealed class FakeSocket : ISocket
         return Task.CompletedTask;
     }
 
+    /// <summary>When it returns true for a frame, SendAsync throws like a broken socket.</summary>
+    public Func<string, bool>? FailSend { get; set; }
+
     public Task SendAsync(string text, CancellationToken ct)
     {
+        if (FailSend?.Invoke(text) == true) throw new System.Net.WebSockets.WebSocketException("send failed (test)");
         lock (Frames) Frames.Add(text);
         foreach (var reply in Rule.RepliesFor(JsonNode.Parse(text)!.AsObject(), Rules)) Push(reply);
         return Task.CompletedTask;

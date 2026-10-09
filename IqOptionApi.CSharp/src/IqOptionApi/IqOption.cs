@@ -46,7 +46,8 @@ public sealed class IqOption : IAsyncDisposable
     private readonly Dictionary<long, double> _recovered = new();
     private readonly Dictionary<long, double> _recoveredDigital = new();
     private readonly Dictionary<long, (double F, double F2)> _afterSale = new();
-    private readonly SemaphoreSlim _reconnecting = new(1, 1);
+    private int _reconnectRunning;
+    private int _dropCount;
     private string? _ssid;
     private string? _twoFaToken;
     private volatile bool _connected;
@@ -237,6 +238,7 @@ public sealed class IqOption : IAsyncDisposable
                 }, ct).ConfigureAwait(false);
             }
             await SendRaw("setOptions", new Obj { ["sendResults"] = true }, ct).ConfigureAwait(false);
+            if (!_conn.IsOpen) return (false, "connection lost while connecting", false);
             _conn.Ready = true;
             return (true, null, false);
         }
@@ -282,63 +284,82 @@ public sealed class IqOption : IAsyncDisposable
     private void OnSocketClosed(string reason)
     {
         if (_closing || !_connected) return;
+        Interlocked.Increment(ref _dropCount);
         Log("connection lost: " + reason);
         RaiseDisconnected(reason);
         if (_o.AutoReconnect) _ = Task.Run(ReconnectLoopAsync);
         else _connected = false;
     }
 
+    /// <summary>
+    /// Reconnects until a connection survives a whole cycle (connect, recovery, Reconnected event). A drop during a cycle
+    /// is counted in <c>_dropCount</c>; its own loop start is refused while this one runs, so this loop goes round again.
+    /// </summary>
     private async Task ReconnectLoopAsync()
     {
-        if (!await _reconnecting.WaitAsync(0).ConfigureAwait(false)) return;
-        try
+        while (true)
         {
-            IReadOnlyList<TimeSpan> delays = _o.ReconnectDelays is { Count: > 0 } custom ? custom : DefaultReconnectDelays;
-            for (int attempt = 0; !_closing; attempt++)
+            if (Interlocked.CompareExchange(ref _reconnectRunning, 1, 0) != 0) return;
+            int handled;
+            try
             {
-                await Task.Delay(delays[Math.Min(attempt, delays.Count - 1)]).ConfigureAwait(false);
-                if (_closing) return;
-                (bool Success, string? Reason, bool LoginRejected) r;
+                handled = await ReconnectOnceAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                Volatile.Write(ref _reconnectRunning, 0);
+            }
+            if (handled < 0 || _closing || handled == Volatile.Read(ref _dropCount)) return;
+            Log("the connection dropped again while reconnecting; trying again");
+        }
+    }
+
+    /// <summary>One reconnect cycle. Returns the drop count it started from, or -1 when it gave up or the client was closed.</summary>
+    private async Task<int> ReconnectOnceAsync()
+    {
+        IReadOnlyList<TimeSpan> delays = _o.ReconnectDelays is { Count: > 0 } custom ? custom : DefaultReconnectDelays;
+        for (int attempt = 0; !_closing; attempt++)
+        {
+            int seen = Volatile.Read(ref _dropCount);
+            await Task.Delay(delays[Math.Min(attempt, delays.Count - 1)]).ConfigureAwait(false);
+            if (_closing) return -1;
+            (bool Success, string? Reason, bool LoginRejected) r;
+            try
+            {
+                r = await ConnectCoreAsync(resetBalance: false, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                r = (false, ex.Message, false);
+            }
+            if (_closing)
+            {
+                await _conn.CloseSocketAsync().ConfigureAwait(false);
+                return -1;
+            }
+            if (r.Success && _conn.IsOpen)
+            {
+                Log("reconnected");
+                await RecoverResultsAsync().ConfigureAwait(false);
                 try
                 {
-                    r = await ConnectCoreAsync(resetBalance: false, CancellationToken.None).ConfigureAwait(false);
+                    Reconnected?.Invoke();
                 }
                 catch (Exception ex)
                 {
-                    r = (false, ex.Message, false);
+                    Log("Reconnected handler threw: " + ex.Message);
                 }
-                if (_closing)
-                {
-                    await _conn.CloseSocketAsync().ConfigureAwait(false);
-                    return;
-                }
-                if (r.Success)
-                {
-                    Log("reconnected");
-                    await RecoverResultsAsync().ConfigureAwait(false);
-                    try
-                    {
-                        Reconnected?.Invoke();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log("Reconnected handler threw: " + ex.Message);
-                    }
-                    return;
-                }
-                if (r.LoginRejected)
-                {
-                    _connected = false;
-                    RaiseDisconnected("login failed: " + r.Reason);
-                    return;
-                }
-                Log($"reconnect attempt {attempt + 1} failed: {r.Reason}");
+                return seen;
             }
+            if (r.LoginRejected)
+            {
+                _connected = false;
+                RaiseDisconnected("login failed: " + r.Reason);
+                return -1;
+            }
+            Log($"reconnect attempt {attempt + 1} failed: {r.Reason}");
         }
-        finally
-        {
-            _reconnecting.Release();
-        }
+        return -1;
     }
 
     /// <summary>Trade results pushed while offline are lost; ask the history once for every pending CheckWin call.</summary>
@@ -472,15 +493,15 @@ public sealed class IqOption : IAsyncDisposable
 
     private int Act(string asset) => _actives.Get(asset);
 
-    private string NextRid() => _conn.NextRequestId();
+    private Task Send(string outer, object msg, string requestId, CancellationToken ct) => _conn.SendAsync(outer, msg, requestId, ct);
 
-    private Task Send(string outer, object msg, string rid, CancellationToken ct) => _conn.SendAsync(outer, msg, rid, ct);
+    /// <summary>Request matched by request_id; <paramref name="requestId"/> null = fresh counter id taken when the frame is sent.</summary>
+    private Task<JsonObject> ById(string reply, object msg, string? requestId, CancellationToken ct) =>
+        _conn.RequestAsync("sendMessage", msg, requestId, reply, true, T, ct);
 
-    private Task<JsonObject> ById(string reply, object msg, string rid, CancellationToken ct) =>
-        _conn.RequestAsync("sendMessage", msg, rid, reply, true, T, ct);
-
-    private Task<JsonObject> ByName(string reply, object msg, string rid, CancellationToken ct) =>
-        _conn.RequestAsync("sendMessage", msg, rid, reply, false, T, ct);
+    /// <summary>Request matched by reply name; <paramref name="requestId"/> null = fresh counter id, "" = Python's empty id.</summary>
+    private Task<JsonObject> ByName(string reply, object msg, string? requestId, CancellationToken ct) =>
+        _conn.RequestAsync("sendMessage", msg, requestId, reply, false, T, ct);
 
     private async Task<bool> WaitCondAsync(Func<bool> condition, TimeSpan timeout, CancellationToken ct)
     {
@@ -592,7 +613,7 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonObject> GetProfileAsync(CancellationToken ct = default)
     {
         EnsureConnected();
-        var r = await ByName("profile", new Obj { ["name"] = "get-profile", ["version"] = "1.0", ["body"] = new Obj() }, NextRid(), ct)
+        var r = await ByName("profile", new Obj { ["name"] = "get-profile", ["version"] = "1.0", ["body"] = new Obj() }, null, ct)
             .ConfigureAwait(false);
         return J.Obj(r["msg"]);
     }
@@ -720,12 +741,11 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonObject> GetTransactionsAsync(long from, long to, int limit, int offset, IEnumerable<string> types, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         return await ById("transactions", new Obj
         {
             ["name"] = "get-transactions",
             ["body"] = new Obj { ["from"] = from, ["to"] = to, ["limit"] = limit, ["offset"] = offset, ["types"] = types.ToList() },
-        }, rid, ct).ConfigureAwait(false);
+        }, null, ct).ConfigureAwait(false);
     }
 
     #endregion
@@ -748,11 +768,10 @@ public sealed class IqOption : IAsyncDisposable
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var w = _conn.AddWaiter(reply, null);
             var clock = Stopwatch.StartNew();
             while (true)
             {
-                await Send("sendMessage", msg, "", ct).ConfigureAwait(false);
+                using var w = await _conn.SendWithWaiterAsync("sendMessage", msg, "", reply, false, ct).ConfigureAwait(false);
                 var left = total - clock.Elapsed;
                 if (left <= TimeSpan.Zero) throw new TimeoutException($"no '{reply}' reply");
                 try
@@ -976,11 +995,10 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonNode?> GetTopAssetAsync(string instrumentType, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         var r = await ById("top-assets", new Obj
         {
             ["name"] = "get-top-assets", ["version"] = "1.2", ["body"] = new Obj { ["instrument_type"] = instrumentType },
-        }, rid, ct).ConfigureAwait(false);
+        }, null, ct).ConfigureAwait(false);
         return r["msg"];
     }
 
@@ -1203,10 +1221,9 @@ public sealed class IqOption : IAsyncDisposable
     {
         EnsureConnected();
         int activeId = Act(asset);
-        string rid = NextRid();
         try
         {
-            var (ok, m, error) = OptionReply(await ById("option", BuyFrame(amount, activeId, direction, minutes), rid, ct).ConfigureAwait(false));
+            var (ok, m, error) = OptionReply(await ById("option", BuyFrame(amount, activeId, direction, minutes), null, ct).ConfigureAwait(false));
             return ok ? (true, J.Long(m!["id"]), null) : (false, 0, error);
         }
         catch (Exception ex) when (IsFailure(ex))
@@ -1227,15 +1244,30 @@ public sealed class IqOption : IAsyncDisposable
         if (amounts.Count != assets.Count || assets.Count != directions.Count || directions.Count != minutes.Count)
             throw new ArgumentException("All lists must have the same length.");
         var activeIds = assets.Select(Act).ToList();
-        var rids = amounts.Select(_ => NextRid()).ToList();
-        var waiters = rids.Select(r => _conn.AddWaiter("option", r)).ToList();
+        var waiters = new List<Waiter?>();
         try
         {
-            for (int i = 0; i < rids.Count; i++)
-                await Send("sendMessage", BuyFrame(amounts[i], activeIds[i], directions[i], minutes[i]), rids[i], ct).ConfigureAwait(false);
+            for (int i = 0; i < amounts.Count; i++)
+            {
+                try
+                {
+                    waiters.Add(await _conn.SendWithWaiterAsync("sendMessage", BuyFrame(amounts[i], activeIds[i], directions[i], minutes[i]),
+                        null, "option", true, ct).ConfigureAwait(false));
+                }
+                catch (Exception ex) when (IsFailure(ex) || ex is System.Net.WebSockets.WebSocketException)
+                {
+                    Log($"buy {i + 1} of {amounts.Count} was not sent: {ex.Message}");
+                    waiters.Add(null);
+                }
+            }
             var ids = new List<long?>();
             foreach (var w in waiters)
             {
+                if (w == null)
+                {
+                    ids.Add(null);
+                    continue;
+                }
                 try
                 {
                     var (ok, m, _) = OptionReply(await w.Task.WaitAsync(T, ct).ConfigureAwait(false));
@@ -1250,7 +1282,7 @@ public sealed class IqOption : IAsyncDisposable
         }
         finally
         {
-            foreach (var w in waiters) w.Dispose();
+            foreach (var w in waiters) w?.Dispose();
         }
     }
 
@@ -1279,7 +1311,6 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<(bool Success, JsonObject? Result, string? Error)> BuyByRawExpirationAsync(double amount, int activeId, Direction direction, int optionTypeId, long expired, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
             return OptionReply(await ById("option", new Obj
@@ -1295,7 +1326,7 @@ public sealed class IqOption : IAsyncDisposable
                 },
                 ["name"] = "binary-options.open-option",
                 ["version"] = "1.0",
-            }, rid, ct).ConfigureAwait(false));
+            }, null, ct).ConfigureAwait(false));
         }
         catch (Exception ex) when (IsFailure(ex))
         {
@@ -1312,7 +1343,6 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds = 30, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         long? balance = GetBalanceId();
         int activeId = Act(asset);
         bool otc = asset.ToUpperInvariant().EndsWith("-OTC", StringComparison.Ordinal);
@@ -1340,7 +1370,7 @@ public sealed class IqOption : IAsyncDisposable
                 },
                 ["name"] = "binary-options.open-option",
                 ["version"] = "2.0",
-            }, rid, ct).ConfigureAwait(false));
+            }, null, ct).ConfigureAwait(false));
         }
         catch (Exception ex) when (IsFailure(ex))
         {
@@ -1354,13 +1384,12 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonObject?> SellOptionAsync(IEnumerable<long> optionIds, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
             return await ById("sold-options", new Obj
             {
                 ["name"] = "sell-options", ["version"] = "2.0", ["body"] = new Obj { ["options_ids"] = optionIds.ToList() },
-            }, rid, ct).ConfigureAwait(false);
+            }, null, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsFailure(ex))
         {
@@ -1486,18 +1515,18 @@ public sealed class IqOption : IAsyncDisposable
     /// <param name="direction">Call or put.</param>
     /// <param name="minutes">Expiry in minutes (1, 5, 15).</param>
     /// <param name="ct">Cancellation.</param>
-    /// <returns><c>(true, positionId, null)</c> or <c>(false, 0, error)</c>.</returns>
+    /// <returns><c>(true, positionId, null)</c>; <c>(false, orderId, reason)</c> when the order was placed but its position did not
+    /// arrive (the order id works with <see cref="CheckWinDigitalAsync"/>); <c>(false, 0, error)</c> when nothing was placed.</returns>
     public async Task<(bool Success, long Id, string? Error)> BuyDigitalSpotAsync(string asset, double amount, Direction direction, int minutes, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         double now = Now;
         var (exp, _) = Helpers.DigitalExp((long)now, minutes, now, _tz);
         string instrumentId = Helpers.DigitalSpotInstrumentId(Act(asset), exp, minutes, direction);
         JsonObject reply;
         try
         {
-            reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), rid, ct).ConfigureAwait(false);
+            reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), null, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsFailure(ex))
         {
@@ -1506,9 +1535,10 @@ public sealed class IqOption : IAsyncDisposable
         if (reply["msg"] is not JsonObject m || !m.ContainsKey("id"))
             return (false, 0, J.Str(Path(reply, "msg", "message")) ?? reply.ToJsonString());
         long orderId = J.Long(m["id"]);
-        if (!await WaitCondAsync(() => HasAsync(orderId, "position-changed"), T, ct).ConfigureAwait(false)) return (false, 0, "timeout");
+        // The order exists from here on: failures return its ORDER id (usable with CheckWinDigitalAsync / GetDigitalPositionAsync).
+        if (!await WaitCondAsync(() => HasAsync(orderId, "position-changed"), T, ct).ConfigureAwait(false)) return (false, orderId, "timeout");
         var external = Path(AsyncMessage(orderId, "position-changed"), "msg", "external_id");
-        return J.IsNull(external) ? (false, 0, null) : (true, J.Long(external), null);
+        return J.IsNull(external) ? (false, orderId, "no position id in the server reply") : (true, J.Long(external), null);
     }
 
     /// <summary>Buys any digital instrument id, e.g. a strike from <see cref="GetRealtimeStrikeListAsync"/> (Python <c>buy_digital</c>).</summary>
@@ -1518,14 +1548,14 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<(bool Success, JsonObject? OrderChanged, string? Error)> BuyDigitalAsync(double amount, string instrumentId, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
-            var reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), rid, ct).ConfigureAwait(false);
+            var reply = await ById("digital-option-placed", DigitalPlaceFrame(instrumentId, amount), null, ct).ConfigureAwait(false);
             if (reply["msg"] is not JsonObject m || !m.ContainsKey("id"))
                 return (false, null, J.Str(Path(reply, "msg", "message")) ?? reply.ToJsonString());
             long orderId = J.Long(m["id"]);
-            if (!await WaitCondAsync(() => HasAsync(orderId, "order-changed"), T, ct).ConfigureAwait(false)) return (false, null, "timeout");
+            if (!await WaitCondAsync(() => HasAsync(orderId, "order-changed"), T, ct).ConfigureAwait(false))
+                return (false, null, $"order {orderId} was placed but no order-changed arrived (timeout)");
             return (true, AsyncMessage(orderId, "order-changed"), null);
         }
         catch (Exception ex) when (IsFailure(ex))
@@ -1549,10 +1579,9 @@ public sealed class IqOption : IAsyncDisposable
     private async Task<bool> DigitalResultAsync(Obj msg, CancellationToken ct)
     {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
-            var r = await ById("result", msg, rid, ct).ConfigureAwait(false);
+            var r = await ById("result", msg, null, ct).ConfigureAwait(false);
             return J.IsTrue(Path(r, "msg", "success"));
         }
         catch (Exception ex) when (IsFailure(ex))
@@ -1794,14 +1823,14 @@ public sealed class IqOption : IAsyncDisposable
     /// <param name="autoMarginCall">Use balance to keep the position open.</param>
     /// <param name="useTokenForCommission">Pay commission with tokens.</param>
     /// <param name="ct">Cancellation.</param>
-    /// <returns><c>(true, orderId, null)</c>, or <c>(false, null, rejectStatus)</c>.</returns>
+    /// <returns><c>(true, orderId, null)</c>; <c>(false, orderId, rejectStatus or reason)</c> once the server created the order;
+    /// <c>(false, null, reason)</c> when it was never created.</returns>
     public async Task<(bool Success, long? OrderId, string? Error)> BuyOrderAsync(string instrumentType, string instrumentId, string side, double amount,
         int leverage, string type, double? limitPrice = null, double? stopPrice = null, string? stopLoseKind = null, double? stopLoseValue = null,
         string? takeProfitKind = null, double? takeProfitValue = null, bool useTrailStop = false, bool autoMarginCall = false,
         bool useTokenForCommission = false, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         long orderId;
         try
         {
@@ -1829,7 +1858,7 @@ public sealed class IqOption : IAsyncDisposable
                     ["user_balance_id"] = Bal,
                     ["client_platform_id"] = "9",
                 },
-            }, rid, ct).ConfigureAwait(false);
+            }, null, ct).ConfigureAwait(false);
             orderId = J.Long(Path(r, "msg", "id"));
         }
         catch (Exception ex) when (IsFailure(ex))
@@ -1840,12 +1869,13 @@ public sealed class IqOption : IAsyncDisposable
         var (ok, data) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
         while (data != null && J.Str(data["status"]) == "pending_new")
         {
-            if (clock.Elapsed > T) return (false, null, "timeout");
+            if (clock.Elapsed > T) return (false, orderId, "timeout waiting for the order to leave pending_new");
             (ok, data) = await GetOrderAsync(orderId, ct).ConfigureAwait(false);
             await Task.Delay(Scaled(1), ct).ConfigureAwait(false);
         }
-        if (!ok || data == null) return (false, null, null);
-        return J.Str(data["status"]) != "rejected" ? (true, orderId, null) : (false, null, J.Str(data["reject_status"]));
+        // The order exists from here on: every result carries its id so the caller can track or close it.
+        if (!ok || data == null) return (false, orderId, "order placed, but its status could not be read");
+        return J.Str(data["status"]) != "rejected" ? (true, orderId, null) : (false, orderId, J.Str(data["reject_status"]));
     }
 
     /// <summary>Changes stop-loss / take-profit (Python <c>change_order</c>); <paramref name="idName"/> is "order_id" or "position_id" (then <paramref name="id"/> is still an order id).</summary>
@@ -1874,8 +1904,7 @@ public sealed class IqOption : IAsyncDisposable
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var w = _conn.AddWaiter("tpsl-changed", null);
-            await Send("sendMessage", new Obj
+            using var w = await _conn.SendWithWaiterAsync("sendMessage", new Obj
             {
                 ["name"] = "change-tpsl",
                 ["version"] = "2.0",
@@ -1889,7 +1918,7 @@ public sealed class IqOption : IAsyncDisposable
                     ["use_trail_stop"] = useTrailStop,
                     ["extra"] = new Obj { ["stop_lose_kind"] = stopLoseKind, ["take_profit_kind"] = takeProfitKind },
                 },
-            }, "", ct).ConfigureAwait(false);
+            }, "", "tpsl-changed", false, ct).ConfigureAwait(false);
             await ChangeAutoMarginCallAsync(idName, target, autoMarginCall, ct).ConfigureAwait(false);
             var r = await w.Task.WaitAsync(T, ct).ConfigureAwait(false);
             return Status2000(r) ? (true, r["msg"]) : (false, r);
@@ -1932,16 +1961,22 @@ public sealed class IqOption : IAsyncDisposable
     /// <param name="ct">Cancellation.</param>
     public async Task<(bool Success, JsonObject? Order)> GetOrderAsync(long orderId, CancellationToken ct = default)
     {
+        var (_, success, order) = await GetOrderCoreAsync(orderId, ct).ConfigureAwait(false);
+        return (success, order);
+    }
+
+    /// <summary><c>Answered</c> is false when no reply came (timeout / connection lost), as opposed to a non-2000 reply.</summary>
+    private async Task<(bool Answered, bool Success, JsonObject? Order)> GetOrderCoreAsync(long orderId, CancellationToken ct)
+    {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
-            var r = await ById("order", new Obj { ["name"] = "get-order", ["body"] = new Obj { ["order_id"] = orderId } }, rid, ct).ConfigureAwait(false);
-            return Status2000(r) ? (true, r["msg"] as JsonObject) : (false, null);
+            var r = await ById("order", new Obj { ["name"] = "get-order", ["body"] = new Obj { ["order_id"] = orderId } }, null, ct).ConfigureAwait(false);
+            return Status2000(r) ? (true, true, r["msg"] as JsonObject) : (true, false, null);
         }
         catch (Exception ex) when (IsFailure(ex))
         {
-            return (false, null);
+            return (false, false, null);
         }
     }
 
@@ -2029,7 +2064,6 @@ public sealed class IqOption : IAsyncDisposable
         IEnumerable<string> instrumentTypes, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         try
         {
             var r = await ById("history", new Obj
@@ -2045,7 +2079,7 @@ public sealed class IqOption : IAsyncDisposable
                     ["limit"] = limit,
                 },
                 ["version"] = "2.0",
-            }, rid, ct).ConfigureAwait(false);
+            }, null, ct).ConfigureAwait(false);
             return Status2000(r) ? (true, r["msg"] as JsonObject) : (false, null);
         }
         catch (Exception ex) when (IsFailure(ex))
@@ -2060,11 +2094,10 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonObject> GetHistoryPositionsAsync(long externalId, CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         return await ById("history-positions", new Obj
         {
             ["name"] = "get-history-positions", ["body"] = new Obj { ["external_id"] = externalId },
-        }, rid, ct).ConfigureAwait(false);
+        }, null, ct).ConfigureAwait(false);
     }
 
     /// <summary>Available leverages (Python <c>get_available_leverages</c>); empty asset = all.</summary>
@@ -2118,7 +2151,13 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<double?> CheckWinMarginAsync(long id, double pollingSeconds = 0.5, CancellationToken ct = default)
     {
         EnsureConnected();
-        var (check, data) = await GetOrderAsync(id, ct).ConfigureAwait(false);
+        // Ask until the server answers: only a real non-2000 answer means "not a margin order, use the id itself".
+        var (answered, check, data) = await GetOrderCoreAsync(id, ct).ConfigureAwait(false);
+        while (!answered)
+        {
+            await Task.Delay(Scaled(pollingSeconds), ct).ConfigureAwait(false);
+            (answered, check, data) = await GetOrderCoreAsync(id, ct).ConfigureAwait(false);
+        }
         long? positionId = null;
         while (true)
         {
@@ -2144,7 +2183,15 @@ public sealed class IqOption : IAsyncDisposable
                     positionId = id;
                 }
             }
-            var pnl = await RawCheckWinAsync(positionId.Value, ct).ConfigureAwait(false);
+            double? pnl = null;
+            try
+            {
+                pnl = await RawCheckWinAsync(positionId.Value, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsFailure(ex))
+            {
+                Log($"check win {id}: {ex.Message}; asking again");
+            }
             if (pnl != null) return pnl;
             await Task.Delay(Scaled(pollingSeconds), ct).ConfigureAwait(false);
         }
@@ -2211,7 +2258,6 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<JsonObject> GetActiveExposureAsync(string instrumentType, string asset, int durationMinutes, string currency = "USD", CancellationToken ct = default)
     {
         EnsureConnected();
-        string rid = NextRid();
         int activeId = Act(asset);
         double now = Now;
         object time;
@@ -2229,7 +2275,7 @@ public sealed class IqOption : IAsyncDisposable
             ["name"] = "get-active-exposure",
             ["version"] = "1.0",
             ["body"] = new Obj { ["instrument_type"] = instrumentType, ["active_id"] = activeId, ["time"] = time, ["currency"] = currency },
-        }, rid, ct).ConfigureAwait(false);
+        }, null, ct).ConfigureAwait(false);
         var ans = new JsonObject();
         if (r["msg"] is JsonObject m && m.ContainsKey("call") && m.ContainsKey("put"))
         {
@@ -2447,8 +2493,7 @@ public sealed class IqOption : IAsyncDisposable
             var clock = Stopwatch.StartNew();
             while (true)
             {
-                using var w = _conn.AddWaiter(reply, null);
-                await Send("sendMessage", msg, "", ct).ConfigureAwait(false);
+                using var w = await _conn.SendWithWaiterAsync("sendMessage", msg, "", reply, false, ct).ConfigureAwait(false);
                 try
                 {
                     var r = await w.Task.WaitAsync(Scaled(0.2), ct).ConfigureAwait(false);

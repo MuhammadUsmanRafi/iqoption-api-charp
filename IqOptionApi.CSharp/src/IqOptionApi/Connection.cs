@@ -128,7 +128,9 @@ internal sealed class Connection : IDisposable
     private ISocket? _socket;
     private CancellationTokenSource? _loopCts;
     private int _requestCounter;
-    private bool _ready;
+    private int _generation;
+    private volatile bool _ready;
+    private volatile bool _isOpen;
 
     internal Connection(IqOptionOptions o, Func<ISocket>? socketFactory, HttpMessageHandler? httpHandler, Action<string> log)
     {
@@ -147,7 +149,11 @@ internal sealed class Connection : IDisposable
 
     public AsyncPulse Pulse { get; } = new();
 
-    public bool IsOpen { get; private set; }
+    public bool IsOpen
+    {
+        get => _isOpen;
+        private set => _isOpen = value;
+    }
 
     /// <summary>True once the connect sequence finished; normal requests wait for it.</summary>
     public bool Ready
@@ -243,11 +249,24 @@ internal sealed class Connection : IDisposable
     {
         await CloseSocketAsync().ConfigureAwait(false);
         var socket = _socketFactory();
-        await socket.ConnectAsync(WebSocketUri, ct).ConfigureAwait(false);
+        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            connectCts.CancelAfter(_o.RequestTimeout);
+            try
+            {
+                await socket.ConnectAsync(WebSocketUri, connectCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                await socket.DisposeAsync().ConfigureAwait(false);
+                throw new IqOptionException($"could not open the connection within {_o.RequestTimeout.TotalSeconds:0.#} s");
+            }
+        }
         Interlocked.Exchange(ref _requestCounter, 0);
         var cts = new CancellationTokenSource();
         _socket = socket;
         _loopCts = cts;
+        Interlocked.Increment(ref _generation);
         IsOpen = true;
         _ = Task.Run(() => ReceiveLoopAsync(socket, cts.Token), CancellationToken.None);
         Pulse.Pulse();
@@ -284,7 +303,22 @@ internal sealed class Connection : IDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                string? text = await socket.ReceiveAsync(ct).ConfigureAwait(false);
+                string? text;
+                using (var idle = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    idle.CancelAfter(_o.ReceiveTimeout);
+                    try
+                    {
+                        text = await socket.ReceiveAsync(idle.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // The server pushes data every second; silence means a dead connection the OS never reported.
+                        reason = $"no data from the server for {_o.ReceiveTimeout.TotalSeconds:0.#} s";
+                        await socket.DisposeAsync().ConfigureAwait(false);
+                        break;
+                    }
+                }
                 if (text == null) break;
                 Dispatch(text);
             }
@@ -409,28 +443,66 @@ internal sealed class Connection : IDisposable
 
     // --------------------------------------------------------------- sending
 
-    public async Task SendAsync(string outer, object? msg, string requestId, CancellationToken ct, bool requireReady = true)
+    /// <summary>Sends one frame. <paramref name="requestId"/> null = take a fresh counter id at send time.</summary>
+    public async Task SendAsync(string outer, object? msg, string? requestId, CancellationToken ct, bool requireReady = true)
     {
-        string frame = PyJson.Frame(outer, msg, requestId);
-        if (requireReady) await WaitUntilReadyAsync(ct).ConfigureAwait(false);
-        try
+        for (int attempt = 0; ; attempt++)
         {
-            await SendOnceAsync(frame, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (requireReady && ex is WebSocketException or ObjectDisposedException or IqOptionException)
-        {
-            // Not sent: wait for the reconnect and send once more (Python re-sends after reconnecting).
-            await WaitUntilReadyAsync(ct).ConfigureAwait(false);
-            await SendOnceAsync(frame, ct).ConfigureAwait(false);
+            if (requireReady) await WaitUntilReadyAsync(ct).ConfigureAwait(false);
+            int generation = Volatile.Read(ref _generation);
+            string frame = PyJson.Frame(outer, msg, requestId ?? NextRequestId());
+            try
+            {
+                await SendOnceAsync(frame, generation, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (requireReady && attempt == 0 && IsNotSent(ex))
+            {
+                // Not sent: wait for the reconnect and send once more (Python re-sends after reconnecting).
+            }
         }
     }
 
-    private async Task SendOnceAsync(string frame, CancellationToken ct)
+    /// <summary>
+    /// Waits until the connection is ready, takes the request id, registers the reply waiter and sends — as one step tied to
+    /// the current socket, so a reconnect can never orphan the waiter of a frame that is still sent.
+    /// <paramref name="requestId"/> null = take a fresh counter id from the socket the frame goes out on.
+    /// </summary>
+    public async Task<Waiter> SendWithWaiterAsync(string outer, object? msg, string? requestId, string replyName, bool byRequestId,
+        CancellationToken ct, bool requireReady = true)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            if (requireReady) await WaitUntilReadyAsync(ct).ConfigureAwait(false);
+            int generation = Volatile.Read(ref _generation);
+            string rid = requestId ?? NextRequestId();
+            var w = AddWaiter(replyName, byRequestId ? rid : null);
+            try
+            {
+                await SendOnceAsync(PyJson.Frame(outer, msg, rid), generation, ct).ConfigureAwait(false);
+                return w;
+            }
+            catch (Exception ex) when (requireReady && attempt == 0 && IsNotSent(ex))
+            {
+                w.Dispose();
+            }
+            catch
+            {
+                w.Dispose();
+                throw;
+            }
+        }
+    }
+
+    private static bool IsNotSent(Exception ex) => ex is NotSentException or WebSocketException or ObjectDisposedException;
+
+    private async Task SendOnceAsync(string frame, int generation, CancellationToken ct)
     {
         await _sendLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var socket = _socket ?? throw new IqOptionException("not connected");
+            var socket = _socket;
+            if (socket == null || !_isOpen || generation != Volatile.Read(ref _generation)) throw new NotSentException();
             await socket.SendAsync(frame, ct).ConfigureAwait(false);
         }
         finally
@@ -453,15 +525,14 @@ internal sealed class Connection : IDisposable
         }
     }
 
-    public async Task<JsonObject> RequestAsync(string outer, object? msg, string requestId, string replyName, bool byRequestId,
+    public async Task<JsonObject> RequestAsync(string outer, object? msg, string? requestId, string replyName, bool byRequestId,
         TimeSpan timeout, CancellationToken ct, bool requireReady = true)
     {
         SemaphoreSlim? gate = byRequestId ? null : Gate(replyName);
         if (gate != null) await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            using var w = AddWaiter(replyName, byRequestId ? requestId : null);
-            await SendAsync(outer, msg, requestId, ct, requireReady).ConfigureAwait(false);
+            using var w = await SendWithWaiterAsync(outer, msg, requestId, replyName, byRequestId, ct, requireReady).ConfigureAwait(false);
             return await w.Task.WaitAsync(timeout, ct).ConfigureAwait(false);
         }
         finally
@@ -474,5 +545,13 @@ internal sealed class Connection : IDisposable
     {
         _loopCts?.Cancel();
         _http.Dispose();
+    }
+}
+
+/// <summary>The frame was not sent because the connection was not available.</summary>
+internal sealed class NotSentException : IqOptionException
+{
+    public NotSentException() : base("not connected")
+    {
     }
 }

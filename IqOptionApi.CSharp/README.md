@@ -57,13 +57,17 @@ Use an `-OTC` asset at weekends, when the normal markets are closed.
 
 ## Options
 
-`new IqOption(email, password, new IqOptionOptions { ... })`: `Host`, `ProxyHost`/`ProxyPort`/`ProxyUser`/`ProxyPassword`, `Ssid` (reuse a session), `AutoLogout` (true), `AutoReconnect` (true), `RequestTimeout` (30 s), `ReconnectDelays`, `IgnoreCertificateErrors` (false), `TimeZone` (computer's zone), `Log`, `LogFrames` (false; frames contain your session id).
+`new IqOption(email, password, new IqOptionOptions { ... })`: `Host`, `ProxyHost`/`ProxyPort`/`ProxyUser`/`ProxyPassword`, `Ssid` (reuse a session), `AutoLogout` (true), `AutoReconnect` (true), `RequestTimeout` (30 s), `ReceiveTimeout` (60 s of silence = dead connection), `ReconnectDelays`, `IgnoreCertificateErrors` (false), `TimeZone` (computer's zone), `Log`, `LogFrames` (false; frames contain your session id).
 
 ## How it behaves
 
 - Every request has a timeout. Trade methods return `(false, …, "timeout")` and data methods throw `TimeoutException`; nothing hangs forever. The exception is the `CheckWin*` methods, which wait until the trade closes; cancel them with a `CancellationToken`.
 - If the connection drops, the library reconnects, subscribes to all your streams again, and recovers trade results that arrived while it was offline. A buy that was already sent is **never sent twice**: it returns `(false, …, "connection lost")`.
+- A connection that goes silent, for example after laptop sleep or a Wi-Fi change, counts as dropped after `ReceiveTimeout` and is reconnected. A drop *during* a reconnect starts another reconnect.
+- A request made while the library is reconnecting waits for the new connection and is then sent once.
+- Once the server has created an order, the result always carries its id, even when a later step fails. For example, `BuyOrderAsync` can return `(false, orderId, reason)`, so you can still track or close the order.
 - Methods can be called from many tasks at once, and each call gets its own reply.
+- Event handlers run on the library's receive loop. Keep them short, never block in them (`.Result`, `.Wait()`), and catch your own exceptions in `async` handlers.
 
 ## Python → C# methods
 
