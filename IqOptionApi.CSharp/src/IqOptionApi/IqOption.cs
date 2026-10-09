@@ -13,8 +13,11 @@ public sealed class IqOption : IAsyncDisposable
 {
     private static readonly string[] PortfolioTypes = { "cfd", "forex", "crypto", "digital-option", "turbo-option", "binary-option" };
 
-    // Not in Python: the live server (checked Oct 2026) pushes blitz position-changed only to this subscription.
-    private static readonly string[] PositionTypes = PortfolioTypes.Append("blitz-option").ToArray();
+    // Not in Python: the live server (checked Oct 2026) pushes blitz position-changed only to the "blitz-option" subscription,
+    // and perpetual crypto (Bitcoin-PerpFuture) trades only to "marginal-crypto".
+    private static readonly string[] PositionTypes = PortfolioTypes.Append("blitz-option").Append("marginal-crypto").ToArray();
+
+    private static readonly string[] OrderTypes = PortfolioTypes.Append("marginal-crypto").ToArray();
 
     private static readonly string[] BillingSubscriptions =
     {
@@ -231,7 +234,7 @@ public sealed class IqOption : IAsyncDisposable
                 await SendRaw("subscribeMessage", new Obj { ["name"] = name, ["version"] = "1.0", ["params"] = new Obj { ["routingFilters"] = new Obj() } }, ct)
                     .ConfigureAwait(false);
             }
-            foreach (string ins in PortfolioTypes)
+            foreach (string ins in OrderTypes)
             {
                 await SendRaw("subscribeMessage", new Obj
                 {
@@ -2219,6 +2222,139 @@ public sealed class IqOption : IAsyncDisposable
             if (J.Long(r!["external_id"]) == externalId) row = r;
         }
         return row == null ? null : Helpers.PyRound2(J.Dbl(row["pnl_realized"]));
+    }
+
+    #endregion
+
+    #region Perpetual crypto (marginal-crypto)
+
+    // Not in Python. Frames copied from the official web traderoom (Bitcoin-PerpFuture, captured Oct 2026).
+
+    /// <summary>Opens a cross-margin perpetual crypto position at market, sized by quantity (web "Advanced mode",
+    /// <c>marginal-crypto.place-market-order</c>). Waits until the position exists, so the result carries the position id needed by
+    /// <see cref="ClosePerpetualAsync"/>. Once the order is placed its id is always returned.</summary>
+    /// <param name="activeId">Active id, e.g. 1979 for Bitcoin-PerpFuture (BTCUSD-XL).</param>
+    /// <param name="side">"buy" (long) or "sell" (short).</param>
+    /// <param name="count">Quantity of the base coin, e.g. 0.01 BTC.</param>
+    /// <param name="leverage">Leverage, e.g. 200.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, long? OrderId, long? PositionId, string? Error)> OpenPerpetualAsync(int activeId, string side, double count, int leverage,
+        CancellationToken ct = default)
+    {
+        EnsureConnected();
+        if (!(count > 0)) throw new ArgumentOutOfRangeException(nameof(count), "count must be above 0");
+        return OpenPerpetualCoreAsync(activeId, side, leverage, body => body["count"] = PlainDecimal(count), false, ct);
+    }
+
+    /// <summary>Opens an isolated-margin perpetual crypto position at market, sized by the amount invested (web "Simple mode"):
+    /// at most <paramref name="margin"/> can be lost. Same result as <see cref="OpenPerpetualAsync"/>.</summary>
+    /// <param name="activeId">Active id, e.g. 1979 for Bitcoin-PerpFuture (BTCUSD-XL).</param>
+    /// <param name="side">"buy" (long) or "sell" (short).</param>
+    /// <param name="margin">Amount invested in the balance currency, e.g. 1 for $1.</param>
+    /// <param name="leverage">Leverage, e.g. 200.</param>
+    /// <param name="ct">Cancellation.</param>
+    public Task<(bool Success, long? OrderId, long? PositionId, string? Error)> OpenPerpetualIsolatedAsync(int activeId, string side, double margin,
+        int leverage, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        if (!(margin > 0)) throw new ArgumentOutOfRangeException(nameof(margin), "margin must be above 0");
+        return OpenPerpetualCoreAsync(activeId, side, leverage, body =>
+        {
+            body["margin"] = PlainDecimal(margin);
+            body["is_margin_isolated"] = true;
+            body["keep_position_open"] = false;
+        }, true, ct);
+    }
+
+    // decimal keeps small sizes as "0.00001" instead of "1E-05".
+    private static string PlainDecimal(double value) => ((decimal)value).ToString(CultureInfo.InvariantCulture);
+
+    private async Task<(bool Success, long? OrderId, long? PositionId, string? Error)> OpenPerpetualCoreAsync(int activeId, string side, int leverage,
+        Action<Obj> addSize, bool isolated, CancellationToken ct)
+    {
+        if (side != "buy" && side != "sell") throw new ArgumentException("side must be \"buy\" or \"sell\"", nameof(side));
+        if (leverage <= 0) throw new ArgumentOutOfRangeException(nameof(leverage), "leverage must be above 0");
+        var body = new Obj
+        {
+            ["side"] = side,
+            ["user_balance_id"] = Bal,
+            ["instrument_id"] = "mcrpt." + activeId.ToString(CultureInfo.InvariantCulture),
+            ["instrument_active_id"] = activeId,
+            ["leverage"] = leverage.ToString(CultureInfo.InvariantCulture),
+        };
+        addSize(body);
+        if (!isolated) body["is_margin_isolated"] = false;
+        long orderId;
+        try
+        {
+            var r = await ById("market-order-placed", new Obj { ["name"] = "marginal-crypto.place-market-order", ["version"] = "1.0", ["body"] = body }, null, ct)
+                .ConfigureAwait(false);
+            if (!Status2000(r)) return (false, null, null, J.Str(Path(r, "msg", "message")) ?? r.ToJsonString());
+            orderId = J.Long(Path(r, "msg", "id"));
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return (false, null, null, Reason(ex));
+        }
+        string? reject = null;
+        bool arrived = await WaitCondAsync(() => HasAsync(orderId, "position-changed") || (reject = PerpetualReject(orderId)) != null, T, ct)
+            .ConfigureAwait(false);
+        if (reject != null) return (false, orderId, null, reject);
+        if (!arrived) return (false, orderId, null, "order placed, but its position did not arrive");
+        return (true, orderId, J.Long(Path(AsyncMessage(orderId, "position-changed"), "msg", "external_id")), null);
+    }
+
+    private string? PerpetualReject(long orderId)
+    {
+        lock (_s.Lock)
+        {
+            if (!_s.OrderAsync.TryGetValue(orderId, out var d) || !d.TryGetValue("order-changed", out var oc)
+                || J.Str(Path(oc, "msg", "status")) != "rejected") return null;
+            return J.Str(MessageRouter.Inner(Path(oc, "msg", "raw_event"))?["reject_status"]) ?? "rejected";
+        }
+    }
+
+    /// <summary>Closes a perpetual crypto position at market (web <c>marginal-crypto.close-position</c>); true when the server accepts it.</summary>
+    /// <param name="positionId">Position id from <see cref="OpenPerpetualAsync"/>.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> ClosePerpetualAsync(long positionId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        try
+        {
+            var r = await ById("position-closed", new Obj
+            {
+                ["name"] = "marginal-crypto.close-position", ["version"] = "1.0", ["body"] = new Obj { ["position_id"] = positionId },
+            }, null, ct).ConfigureAwait(false);
+            return Status2000(r);
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Waits until a perpetual crypto position closes (by you, TP/SL or the server) and returns its net profit (<c>pnl_net</c>).
+    /// No timeout: cancel with <paramref name="ct"/>. A close that happens while the connection is down is not recovered.</summary>
+    /// <param name="positionId">Position id from <see cref="OpenPerpetualAsync"/>.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(TradeResult Result, double Profit)> CheckWinPerpetualAsync(long positionId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        double? profit = null;
+        await _conn.WaitUntilAsync(() => (profit = PerpetualCloseProfit(positionId)) != null, null, ct).ConfigureAwait(false);
+        return (Helpers.ResultOf(profit!.Value), profit.Value);
+    }
+
+    private double? PerpetualCloseProfit(long positionId)
+    {
+        lock (_s.Lock)
+        {
+            if (_s.OrderAsync.TryGetValue(positionId, out var d) && d.TryGetValue("position-changed", out var pc) && pc["msg"] is JsonObject m
+                && J.Str(m["source"]) == "marginal-crypto" && J.Str(m["status"]) == "closed")
+                return J.Dbl(m["pnl_net"]);
+        }
+        return null;
     }
 
     #endregion

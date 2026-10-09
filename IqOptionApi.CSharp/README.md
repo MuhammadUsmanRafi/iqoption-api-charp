@@ -2,7 +2,7 @@
 
 A C# (.NET 9) port of the Python **iqoptionapi** library (v9.4) in this repository.
 
-It is a **library**: there's no screen and no trading strategy. Your own bot or app references it and uses one class, `IqOption`, to log in, read prices and trade on IQ Option. Every message it sends is byte-for-byte what the Python library sends (plus one blitz subscription Python is missing), and this is checked by tests generated from the Python code itself.
+It is a **library**: there's no screen and no trading strategy. Your own bot or app references it and uses one class, `IqOption`, to log in, read prices and trade on IQ Option. Every message it sends is byte-for-byte what the Python library sends (plus a few subscriptions and the perpetual-crypto methods Python is missing), and this is checked by tests generated from the Python code itself.
 
 > **Note.** IQ Option has no official public API. This library uses the same private protocol as their web app, so it can stop working when IQ Option changes that protocol. Automated trading may also conflict with IQ Option's terms of service. Using it is your decision.
 
@@ -77,11 +77,13 @@ Use an `-OTC` asset at weekends, when the normal markets are closed.
 | Turbo buy + `CheckWinAsync` | ✅ |
 | Digital spot buy + `CheckWinDigitalAsync` | ✅ |
 | Blitz buy + `CheckWinAsync` | ✅ (with the `blitz-option` subscription, fix 11) |
+| Bitcoin perpetual, cross and isolated: open, close, `CheckWinPerpetualAsync` | ✅ (not in Python, see below) |
 
 What the live server does differently from the Python code's assumptions:
 
 - **Closed binary/turbo options.** The server no longer sends `option-closed`, so Python's `check_win_v3` would wait forever. A closed option now arrives as a closed `position-changed`, and `CheckWinAsync` understands both.
 - **Blitz options.** Their `position-changed` messages (`instrument_type` `blitz-option`) are only pushed to clients that subscribe to `blitz-option`. Python never does, so a blitz result never arrives there. `ConnectAsync` adds this one subscription per balance; every other connect frame is still Python's.
+- **Perpetual crypto (e.g. Bitcoin-PerpFuture).** These are traded through `marginal-crypto` messages, a newer system than Python's `place-order-temp` / `crypto` orders (`BuyOrderAsync`). The messages were copied from the official web traderoom. Their updates are only pushed to clients that subscribe to `marginal-crypto`, which `ConnectAsync` now does. The API session receives `raw_event` flat while the web traderoom receives it wrapped (`{"marginal_crypto_position_changed1": {…}}`); both are understood.
 - **The `get-instruments` list (forex/CFD/crypto).** The server did not answer this request, so `GetInstrumentsAsync`, `UpdateMarginActivesAsync` and `GetAllOpenTimeAsync` time out. Python sends the same request and would hang.
 - **Asset availability changes.** Assets are suspended from time to time ("active is suspended"), and some digital names now end in `-op` (e.g. `EURUSD-op`). Use `GetAllInitAsync()` / `GetDigitalUnderlyingListAsync()` to see what is open, and `UpdateDigitalActivesAsync()` to learn new names.
 
@@ -221,6 +223,19 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 | `Task<(bool Success, JsonObject? Message)> GetOvernightFeeAsync(string instrumentType, string asset)` | `get_overnight_fee` |
 | `Task<double?> CheckWinMarginAsync(long id, double pollingSeconds = 0.5)` | `check_win` (+ `raw_check_win`); null when the order was cancelled |
 
+### Perpetual crypto (not in Python)
+
+Bitcoin-PerpFuture is active id `1979`. In the web traderoom, Settings → Trading → Trading mode chooses the default: "Simple mode" = isolated, "Advanced mode" = cross. The API sends the mode with every order, whatever that setting is.
+
+| C# | What it does |
+|---|---|
+| `Task<(bool Success, long? OrderId, long? PositionId, string? Error)> OpenPerpetualIsolatedAsync(int activeId, string side, double margin, int leverage)` | Isolated margin, sized by the amount invested (at most `margin` can be lost). `side` is `"buy"` or `"sell"`. |
+| `Task<(bool Success, long? OrderId, long? PositionId, string? Error)> OpenPerpetualAsync(int activeId, string side, double count, int leverage)` | Cross margin, sized by coin quantity (e.g. `0.01` BTC); the whole balance backs it. |
+| `Task<bool> ClosePerpetualAsync(long positionId)` | Closes at market. |
+| `Task<(TradeResult Result, double Profit)> CheckWinPerpetualAsync(long positionId)` | Waits until the position closes (by you, TP/SL or the server); profit = `pnl_net`. A close that happens while the connection is down is not recovered. |
+
+Both open methods wait until the position exists and return its id. Once the server has created the order, its id is always returned, even when a later step fails; `Error` is the server's reason (e.g. `reject_status`). Not supported yet: TP/SL, limit/stop orders, other perpetual coins' active ids (pass them yourself), closing several positions at once.
+
 ### Extras
 
 | C# | Python |
@@ -246,7 +261,7 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 ## Differences from Python
 
 ### Copied exactly
-- All outgoing frames byte-for-byte (apart from the extra blitz subscription, fix 11), including `request_id` values and Python's odd-but-working payloads.
+- All outgoing frames byte-for-byte (apart from the extra blitz and `marginal-crypto` subscriptions, fixes 11–12, and the perpetual-crypto methods), including `request_id` values and Python's odd-but-working payloads.
 - Expiry maths: `get_expiration_time` , `get_remaning_time` , digital spot expiry and instrument-id formatting , strike-list expiry .
 - Formulas: payout `(100 − commission) / 100`; blitz `profit_percent = (int)(fraction * 100)` (double truncation); digital profit `((100 − ask) * 100) / ask`; strike key `"%.6f" % (value * 10e-7)`; `check_win` rounding = `Math.Round(x, 2, MidpointRounding.ToEven)`; digital sell-back value including the always-false call flag.
 - Candle buffer eviction (`dict_queue_add`), live-deal deque semantics, insertion-ordered asset table with first-name-wins reverse lookup.
@@ -264,7 +279,8 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 8. `BuyByRawExpirationAsync` reports failures.
 9. `CloseAsync` / `DisposeAsync` really stop (no hidden auto-reconnect of the closed socket); proxy/TLS settings are kept on reconnect.
 10. SSL certificates are verified (opt-out: `IgnoreCertificateErrors`).
-11. Blitz results arrive: `ConnectAsync` also subscribes `portfolio.position-changed` for `blitz-option` (the only extra outgoing frame).
+11. Blitz results arrive: `ConnectAsync` also subscribes `portfolio.position-changed` for `blitz-option`.
+12. Perpetual crypto updates arrive: `ConnectAsync` also subscribes `portfolio.position-changed` (per balance) and `portfolio.order-changed` for `marginal-crypto`.
 
 ### Known quirk kept on purpose
 `GetDigitalSpotProfitAfterSaleAsync` computes calls with the put formula, as Python does. Without IQ Option reference numbers we cannot prove which is correct; documented in the README.

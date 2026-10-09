@@ -123,6 +123,12 @@ internal sealed class MessageRouter
 
     private void SetAsync(long id, string name, JsonObject m) => State.GetOrAdd(_s.OrderAsync, id)[name] = m;
 
+    /// <summary>The payload of a marginal-* raw event. The API session receives it flat (<c>{"id":…,"order_ids":[…]}</c>); the web traderoom
+    /// receives it wrapped in one named object (<c>{"marginal_crypto_position_changed1": {…}}</c>). Both are accepted.</summary>
+    internal static JsonObject? Inner(JsonNode? rawEvent) => rawEvent is not JsonObject o ? null
+        : o.ContainsKey("id") ? o
+        : o.Select(p => p.Value).OfType<JsonObject>().FirstOrDefault();
+
     private void Route(string? name, JsonObject m, List<Action> after)
     {
         JsonNode? msg = m["msg"];
@@ -213,6 +219,12 @@ internal sealed class MessageRouter
                 {
                     SetAsync(J.Long(o["external_id"]), name, m);
                 }
+                else if (service == "portfolio" && source == "marginal-crypto")
+                {
+                    // Not in Python: perpetual crypto. Stored under the position id and the opening order id.
+                    SetAsync(J.Long(o["external_id"]), name, m);
+                    if (Inner(o["raw_event"])?["order_ids"] is JsonArray ids && ids.Count > 0) SetAsync(J.Long(ids[0]), name, m);
+                }
                 string? status = J.Str(o["status"]);
                 if (source == "binary-options" && status == "open") _s.OptionOpened[J.Long(o["external_id"])] = m;
                 else if (source == "digital-options" && status == "open") _s.DigitalOpened[J.Long(o["external_id"])] = m;
@@ -226,6 +238,12 @@ internal sealed class MessageRouter
                     var raw = msg!["raw_event"]!;
                     SetAsync(J.Long(raw["position_id"]), name, m);
                     SetAsync(J.Long(raw["id"]), name, m);
+                }
+                else if (J.Str(m["microserviceName"]) == "portfolio" && J.Str(J.Obj(msg)["source"]) == "marginal-crypto"
+                    && Inner(msg!["raw_event"]) is JsonObject order)
+                {
+                    SetAsync(J.Long(order["id"]), name, m);
+                    if (!J.IsNull(order["position_id"])) SetAsync(J.Long(order["position_id"]), name, m);
                 }
                 break;
 
