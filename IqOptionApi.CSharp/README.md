@@ -69,6 +69,20 @@ Use an `-OTC` asset at weekends, when the normal markets are closed.
 - Methods can be called from many tasks at once, and each call gets its own reply.
 - Event handlers run on the library's receive loop. Keep them short, never block in them (`.Result`, `.Wait()`), and catch your own exceptions in `async` handlers.
 
+## Live check (9 Oct 2026, practice account)
+
+| What was checked | Result |
+|---|---|
+| Login, balance, historic and live candles | ✅ |
+| Turbo buy + `CheckWinAsync` | ✅ |
+| Digital spot buy + `CheckWinDigitalAsync` | ✅ |
+
+What the live server does differently from the Python code's assumptions:
+
+- **Closed binary/turbo options.** The server no longer sends `option-closed`, so Python's `check_win_v3` would wait forever. A closed option now arrives as a closed `position-changed`, and `CheckWinAsync` understands both.
+- **The `get-instruments` list (forex/CFD/crypto).** The server did not answer this request, so `GetInstrumentsAsync`, `UpdateMarginActivesAsync` and `GetAllOpenTimeAsync` time out. Python sends the same request and would hang.
+- **Asset availability changes.** Assets are suspended from time to time ("active is suspended"), and some digital names now end in `-op` (e.g. `EURUSD-op`). Use `GetAllInitAsync()` / `GetDigitalUnderlyingListAsync()` to see what is open, and `UpdateDigitalActivesAsync()` to learn new names.
+
 ## Python → C# methods
 
 ### Public types (`Models.cs`)

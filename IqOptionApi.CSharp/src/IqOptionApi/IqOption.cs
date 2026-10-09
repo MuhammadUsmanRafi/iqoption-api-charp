@@ -1397,7 +1397,8 @@ public sealed class IqOption : IAsyncDisposable
         }
     }
 
-    /// <summary>Waits until a binary/turbo option closes (Python <c>check_win_v3</c>); profit = payout − stake. No timeout: cancel with <paramref name="ct"/>.</summary>
+    /// <summary>Waits until a binary/turbo option closes (Python <c>check_win_v3</c>); profit = payout − stake. Understands both the old
+    /// <c>option-closed</c> message and the closed <c>position-changed</c> the live server sends today. No timeout: cancel with <paramref name="ct"/>.</summary>
     /// <param name="optionId">Id returned by <see cref="BuyAsync"/>.</param>
     /// <param name="ct">Cancellation.</param>
     public async Task<(TradeResult Result, double Profit)> CheckWinAsync(long optionId, CancellationToken ct = default)
@@ -1420,10 +1421,19 @@ public sealed class IqOption : IAsyncDisposable
     {
         lock (_s.Lock)
         {
-            if (_s.OrderAsync.TryGetValue(optionId, out var d) && d.TryGetValue("option-closed", out var closed))
+            if (_s.OrderAsync.TryGetValue(optionId, out var d))
             {
-                var m = J.Obj(closed["msg"]);
-                return J.Dbl(m["profit_amount"]) - J.Dbl(m["amount"]);
+                if (d.TryGetValue("option-closed", out var closed))
+                {
+                    var m = J.Obj(closed["msg"]);
+                    return J.Dbl(m["profit_amount"]) - J.Dbl(m["amount"]);
+                }
+                // The live server (checked Oct 2026) no longer sends option-closed: a closed option arrives as position-changed.
+                if (d.TryGetValue("position-changed", out var pc) && pc["msg"] is JsonObject p
+                    && J.Str(p["source"]) == "binary-options" && J.Str(p["status"]) == "closed")
+                {
+                    return J.Dbl(p["close_profit"]) - J.Dbl(p["invest"]);
+                }
             }
         }
         lock (_track) return _recovered.TryGetValue(optionId, out double p) ? p : null;
