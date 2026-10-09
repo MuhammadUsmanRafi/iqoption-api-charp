@@ -2060,5 +2060,324 @@ public sealed class IqOption : IAsyncDisposable
 
     #endregion
 
+    #region Extras
+
+    /// <summary>Leaderboard (Python <c>get_leader_board</c>); <paramref name="country"/> is "Worldwide" or a two-letter code.</summary>
+    /// <param name="country">"Worldwide" or e.g. "PK".</param>
+    /// <param name="fromPosition">First rank.</param>
+    /// <param name="toPosition">Last rank.</param>
+    /// <param name="nearTradersCount">Traders near you.</param>
+    /// <param name="userCountryId">Your country id.</param>
+    /// <param name="nearTradersCountryCount">Near traders in your country.</param>
+    /// <param name="topCountryCount">Top in country.</param>
+    /// <param name="topCount">Top overall.</param>
+    /// <param name="topType">Ranking type (2 by default).</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetLeaderBoardAsync(string country, int fromPosition, int toPosition, int nearTradersCount, int userCountryId = 0,
+        int nearTradersCountryCount = 0, int topCountryCount = 0, int topCount = 0, int topType = 2, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        if (!Countries.Ids.TryGetValue(country, out int countryId))
+            throw new KeyNotFoundException($"Unknown country '{country}'. Use \"Worldwide\" or a two-letter code such as \"PK\".");
+        var r = await ByName("leaderboard-deals-client", new Obj
+        {
+            ["name"] = "request-leaderboard-deals-client",
+            ["version"] = "1.0",
+            ["body"] = new Obj
+            {
+                ["country_id"] = countryId,
+                ["user_country_id"] = userCountryId,
+                ["from_position"] = fromPosition,
+                ["to_position"] = toPosition,
+                ["near_traders_country_count"] = nearTradersCountryCount,
+                ["near_traders_count"] = nearTradersCount,
+                ["top_country_count"] = topCountryCount,
+                ["top_count"] = topCount,
+                ["top_type"] = topType,
+            },
+        }, "", ct).ConfigureAwait(false);
+        return J.Obj(r["msg"]);
+    }
+
+    /// <summary>Share of call vs put money for an asset and expiry (Python <c>get_active_exposure</c>): <c>{call, put}</c>.</summary>
+    /// <param name="instrumentType">"turbo-option", "binary-option" or "digital-option".</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="durationMinutes">Expiry in minutes.</param>
+    /// <param name="currency">Currency.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> GetActiveExposureAsync(string instrumentType, string asset, int durationMinutes, string currency = "USD", CancellationToken ct = default)
+    {
+        EnsureConnected();
+        string rid = NextRid();
+        int activeId = Act(asset);
+        double now = Now;
+        object time;
+        if (instrumentType == "digital-option")
+        {
+            var (value, isFloat) = Helpers.DigitalExp((long)now, durationMinutes, now, _tz);
+            time = isFloat ? new PyFloat(value) : (long)value;
+        }
+        else
+        {
+            time = Helpers.GetExpirationTime((long)now, durationMinutes, now, _tz).Exp;
+        }
+        var r = await ById("active-exposure", new Obj
+        {
+            ["name"] = "get-active-exposure",
+            ["version"] = "1.0",
+            ["body"] = new Obj { ["instrument_type"] = instrumentType, ["active_id"] = activeId, ["time"] = time, ["currency"] = currency },
+        }, rid, ct).ConfigureAwait(false);
+        var ans = new JsonObject();
+        if (r["msg"] is JsonObject m && m.ContainsKey("call") && m.ContainsKey("put"))
+        {
+            ans["call"] = m["call"]?.DeepClone();
+            ans["put"] = m["put"]?.DeepClone();
+        }
+        return ans;
+    }
+
+    /// <summary>Streams traders' mood for an asset (Python <c>start_mood_stream</c>); true once the first value arrived.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<bool> StartMoodStreamAsync(string asset, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        int id = Act(asset);
+        lock (_track)
+        {
+            if (!_moodStreams.Contains(asset)) _moodStreams.Add(asset);
+        }
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            await Send("subscribeMessage", MoodMsg(asset), "", ct).ConfigureAwait(false);
+            if (await WaitCondAsync(() => { lock (_s.Lock) return _s.TradersMood.ContainsKey(id); }, Scaled(5), ct).ConfigureAwait(false)) return true;
+            if (clock.Elapsed > T) return false;
+        }
+    }
+
+    /// <summary>Stops the mood stream (Python <c>stop_mood_stream</c>).</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task StopMoodStreamAsync(string asset, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _moodStreams.Remove(asset);
+        await Send("unsubscribeMessage", MoodMsg(asset), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Share of traders buying "call" (higher), 0–1 (Python <c>get_traders_mood</c>); null if not streamed yet.</summary>
+    /// <param name="asset">Asset name.</param>
+    public double? GetTradersMood(string asset)
+    {
+        int id = Act(asset);
+        lock (_s.Lock) return _s.TradersMood.TryGetValue(id, out double v) ? v : null;
+    }
+
+    /// <summary>Every streamed mood by asset id (Python <c>get_all_traders_mood</c>).</summary>
+    public IReadOnlyDictionary<int, double> GetAllTradersMood()
+    {
+        lock (_s.Lock) return new Dictionary<int, double>(_s.TradersMood);
+    }
+
+    /// <summary>Streams top-asset updates (Python <c>subscribe_top_assets_updated</c>).</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task SubscribeTopAssetsUpdatedAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track)
+        {
+            if (!_topAssetsSubscriptions.Contains(instrumentType)) _topAssetsSubscriptions.Add(instrumentType);
+        }
+        await Send("subscribeMessage", TopAssetsMsg(instrumentType), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops <see cref="SubscribeTopAssetsUpdatedAsync"/>.</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UnsubscribeTopAssetsUpdatedAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _topAssetsSubscriptions.Remove(instrumentType);
+        await Send("unsubscribeMessage", TopAssetsMsg(instrumentType), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Last top-assets update (Python <c>get_top_assets_updated</c>); null if none.</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    public JsonNode? GetTopAssetsUpdated(string instrumentType)
+    {
+        lock (_s.Lock) return _s.TopAssetsUpdated.TryGetValue(instrumentType, out var v) ? v : null;
+    }
+
+    /// <summary>Streams commission changes (Python <c>subscribe_commission_changed</c>).</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task SubscribeCommissionChangedAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track)
+        {
+            if (!_commissionSubscriptions.Contains(instrumentType)) _commissionSubscriptions.Add(instrumentType);
+        }
+        await Send("subscribeMessage", CommissionMsg(instrumentType), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops <see cref="SubscribeCommissionChangedAsync"/>.</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UnsubscribeCommissionChangedAsync(string instrumentType, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        lock (_track) _commissionSubscriptions.Remove(instrumentType);
+        await Send("unsubscribeMessage", CommissionMsg(instrumentType), "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Commission changes: asset → (server time → commission) (Python <c>get_commission_change</c>).</summary>
+    /// <param name="instrumentType">Instrument type.</param>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<double, int>> GetCommissionChange(string instrumentType)
+    {
+        lock (_s.Lock)
+        {
+            return _s.Commission.TryGetValue(instrumentType, out var byAsset)
+                ? byAsset.ToDictionary(x => x.Key, x => (IReadOnlyDictionary<double, int>)new Dictionary<double, int>(x.Value))
+                : new Dictionary<string, IReadOnlyDictionary<double, int>>();
+        }
+    }
+
+    /// <summary>Streams other users' trades (Python <c>subscribe_live_deal</c>); keeps the newest <paramref name="bufferSize"/>.</summary>
+    /// <param name="name">"live-deal-binary-option-placed", "live-deal-digital-option" or "live-deal".</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="type">"turbo"/"binary", "PT1M"/"PT5M"/"PT15M", or an instrument type.</param>
+    /// <param name="bufferSize">How many deals to keep.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task SubscribeLiveDealAsync(string name, string asset, string type, int bufferSize, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var msg = LiveDealMsg(name, asset, type);
+        lock (_s.Lock)
+        {
+            var key = (name, asset, type);
+            if (!_s.LiveDeals.TryGetValue(key, out var buffer)) _s.LiveDeals[key] = buffer = new LiveDealBuffer();
+            buffer.MaxLength = bufferSize;
+            buffer.Trim();
+        }
+        lock (_track)
+        {
+            if (!_liveDealSubscriptions.Contains((name, asset, type))) _liveDealSubscriptions.Add((name, asset, type));
+        }
+        await Send("subscribeMessage", msg, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops <see cref="SubscribeLiveDealAsync"/> (Python <c>unscribe_live_deal</c>).</summary>
+    /// <param name="name">Stream name.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="type">Type filter.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task UnsubscribeLiveDealAsync(string name, string asset, string type, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var msg = LiveDealMsg(name, asset, type);
+        lock (_track) _liveDealSubscriptions.Remove((name, asset, type));
+        await Send("unsubscribeMessage", msg, "", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stored live deals, newest first (Python <c>get_live_deal</c>).</summary>
+    /// <param name="name">Stream name.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="type">Type filter.</param>
+    public IReadOnlyList<JsonObject> GetLiveDeal(string name, string asset, string type)
+    {
+        lock (_s.Lock) return _s.LiveDeals.TryGetValue((name, asset, type), out var b) ? b.NewestFirst() : new List<JsonObject>();
+    }
+
+    /// <summary>Removes and returns the oldest stored deal (Python <c>pop_live_deal</c>); null if empty.</summary>
+    /// <param name="name">Stream name.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="type">Type filter.</param>
+    public JsonObject? PopLiveDeal(string name, string asset, string type)
+    {
+        lock (_s.Lock) return _s.LiveDeals.TryGetValue((name, asset, type), out var b) ? b.PopOldest() : null;
+    }
+
+    /// <summary>Empties the stored deals and sets a new size (Python <c>clear_live_deal</c>).</summary>
+    /// <param name="name">Stream name.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="type">Type filter.</param>
+    /// <param name="bufferSize">How many deals to keep.</param>
+    public void ClearLiveDeal(string name, string asset, string type, int bufferSize)
+    {
+        lock (_s.Lock) _s.LiveDeals[(name, asset, type)] = new LiveDealBuffer { MaxLength = bufferSize };
+    }
+
+    /// <summary>Public profile of another user (Python <c>get_user_profile_client</c>).</summary>
+    /// <param name="userId">User id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonNode?> GetUserProfileClientAsync(long userId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var r = await ByName("user-profile-client", new Obj
+        {
+            ["name"] = "get-user-profile-client", ["body"] = new Obj { ["user_id"] = userId }, ["version"] = "1.0",
+        }, "", ct).ConfigureAwait(false);
+        return r["msg"];
+    }
+
+    /// <summary>Leaderboard info of a user (Python <c>request_leaderboard_userinfo_deals_client</c>; asks again every 0.2 s until successful).</summary>
+    /// <param name="userId">User id.</param>
+    /// <param name="countryId">Country id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonObject> RequestLeaderboardUserinfoDealsClientAsync(long userId, int countryId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        const string reply = "leaderboard-userinfo-deals-client";
+        var msg = new Obj
+        {
+            ["name"] = "request-leaderboard-userinfo-deals-client",
+            ["body"] = new Obj { ["country_ids"] = new[] { countryId }, ["requested_user_id"] = userId },
+            ["version"] = "1.0",
+        };
+        var gate = _conn.Gate(reply);
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var clock = Stopwatch.StartNew();
+            while (true)
+            {
+                using var w = _conn.AddWaiter(reply, null);
+                await Send("sendMessage", msg, "", ct).ConfigureAwait(false);
+                try
+                {
+                    var r = await w.Task.WaitAsync(Scaled(0.2), ct).ConfigureAwait(false);
+                    if (J.IsTrue(Path(r, "msg", "isSuccessful"))) return J.Obj(r["msg"]);
+                }
+                catch (TimeoutException)
+                {
+                    // not answered yet: ask again, like Python
+                }
+                if (clock.Elapsed > T) throw new TimeoutException("no successful " + reply + " reply");
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Online status of a user (Python <c>get_users_availability</c>).</summary>
+    /// <param name="userId">User id.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<JsonNode?> GetUsersAvailabilityAsync(long userId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var r = await ResendUntilAsync("users-availability", new Obj
+        {
+            ["name"] = "get-users-availability", ["body"] = new Obj { ["user_ids"] = new[] { userId } }, ["version"] = "1.0",
+        }, Scaled(0.2), T, ct).ConfigureAwait(false);
+        return r["msg"];
+    }
+
+    #endregion
+
     // @@GROUPS@@
 }

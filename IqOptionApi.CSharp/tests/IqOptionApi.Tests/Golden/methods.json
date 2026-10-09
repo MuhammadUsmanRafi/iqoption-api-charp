@@ -8120,6 +8120,567 @@
    ],
    "result": 2.67,
    "compare_result": true
+  },
+  {
+   "name": "get_leader_board",
+   "csharp": {
+    "method": "GetLeaderBoardAsync",
+    "args": {
+     "country": "Worldwide",
+     "from": 1,
+     "to": 10,
+     "near": 5
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:request-leaderboard-deals-client",
+     "reply": [
+      {
+       "name": "leaderboard-deals-client",
+       "request_id": "",
+       "msg": {
+        "result": {
+         "positional": {}
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"request-leaderboard-deals-client\", \"version\": \"1.0\", \"body\": {\"country_id\": 0, \"user_country_id\": 0, \"from_position\": 1, \"to_position\": 10, \"near_traders_country_count\": 0, \"near_traders_count\": 5, \"top_country_count\": 0, \"top_count\": 0, \"top_type\": 2}}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "result": {
+     "positional": {}
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_active_exposure_turbo",
+   "csharp": {
+    "method": "GetActiveExposureAsync",
+    "args": {
+     "type": "turbo-option",
+     "asset": "EURUSD",
+     "minutes": 1
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-active-exposure",
+     "reply": [
+      {
+       "name": "active-exposure",
+       "request_id": "$RID",
+       "msg": {
+        "call": 0.6,
+        "put": 0.4
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-active-exposure\", \"version\": \"1.0\", \"body\": {\"instrument_type\": \"turbo-option\", \"active_id\": 1861, \"time\": 1791549060, \"currency\": \"USD\"}}, \"request_id\": \"2\"}"
+   ],
+   "result": {
+    "call": 0.6,
+    "put": 0.4
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_active_exposure_digital_5",
+   "csharp": {
+    "method": "GetActiveExposureAsync",
+    "args": {
+     "type": "digital-option",
+     "asset": "EURUSD",
+     "minutes": 5
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-active-exposure",
+     "reply": [
+      {
+       "name": "active-exposure",
+       "request_id": "$RID",
+       "msg": {
+        "call": 0.6,
+        "put": 0.4
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-active-exposure\", \"version\": \"1.0\", \"body\": {\"instrument_type\": \"digital-option\", \"active_id\": 1861, \"time\": 1791549350.0, \"currency\": \"USD\"}}, \"request_id\": \"2\"}"
+   ],
+   "result": {
+    "call": 0.6,
+    "put": 0.4
+   },
+   "compare_result": true
+  },
+  {
+   "name": "start_mood_stream",
+   "csharp": {
+    "method": "StartMoodStreamAsync",
+    "args": {
+     "asset": "EURUSD"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "subscribeMessage:traders-mood-changed",
+     "reply": [
+      {
+       "name": "traders-mood-changed",
+       "msg": {
+        "asset_id": 1861,
+        "value": 0.55
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"traders-mood-changed\", \"params\": {\"routingFilters\": {\"instrument\": \"turbo-option\", \"asset_id\": 1861}}}, \"request_id\": \"\"}"
+   ],
+   "result": 0.55,
+   "compare_result": true
+  },
+  {
+   "name": "stop_mood_stream",
+   "csharp": {
+    "method": "StopMoodStreamAsync",
+    "args": {
+     "asset": "EURUSD"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"traders-mood-changed\", \"params\": {\"routingFilters\": {\"instrument\": \"turbo-option\", \"asset_id\": 1861}}}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "get_all_traders_mood",
+   "csharp": {
+    "method": "GetAllTradersMood",
+    "args": {}
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "traders-mood-changed",
+     "msg": {
+      "asset_id": 1861,
+      "value": 0.55
+     }
+    },
+    {
+     "name": "traders-mood-changed",
+     "msg": {
+      "asset_id": 76,
+      "value": 0.3
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "1861": 0.55,
+    "76": 0.3
+   },
+   "compare_result": true
+  },
+  {
+   "name": "subscribe_top_assets_updated",
+   "csharp": {
+    "method": "SubscribeTopAssetsUpdatedAsync",
+    "args": {
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"top-assets-updated\", \"params\": {\"routingFilters\": {\"instrument_type\": \"forex\"}}, \"version\": \"1.2\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "unsubscribe_top_assets_updated",
+   "csharp": {
+    "method": "UnsubscribeTopAssetsUpdatedAsync",
+    "args": {
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"top-assets-updated\", \"params\": {\"routingFilters\": {\"instrument_type\": \"forex\"}}, \"version\": \"1.2\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "get_top_assets_updated",
+   "csharp": {
+    "method": "GetTopAssetsUpdated",
+    "args": {
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "top-assets-updated",
+     "msg": {
+      "instrument_type": "forex",
+      "data": [
+       {
+        "active_id": 1861
+       }
+      ]
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": [
+    {
+     "active_id": 1861
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "subscribe_commission_changed",
+   "csharp": {
+    "method": "SubscribeCommissionChangedAsync",
+    "args": {
+     "type": "digital-option"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"commission-changed\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\"}}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "unsubscribe_commission_changed",
+   "csharp": {
+    "method": "UnsubscribeCommissionChangedAsync",
+    "args": {
+     "type": "digital-option"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"commission-changed\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\"}}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "get_commission_change",
+   "csharp": {
+    "method": "GetCommissionChange",
+    "args": {
+     "type": "turbo-option"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "commission-changed",
+     "msg": {
+      "instrument_type": "turbo-option",
+      "active_id": 1861,
+      "commission": {
+       "value": 18
+      }
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "EURUSD": {
+     "1791549020.0": 18
+    }
+   },
+   "compare_result": true
+  },
+  {
+   "name": "subscribe_live_deal",
+   "csharp": {
+    "method": "SubscribeLiveDealAsync",
+    "args": {
+     "name": "live-deal-binary-option-placed",
+     "asset": "EURUSD",
+     "type": "turbo",
+     "size": 10
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"live-deal-binary-option-placed\", \"params\": {\"routingFilters\": {\"active_id\": 1861, \"option_type\": \"turbo\"}}, \"version\": \"2.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "subscribe_live_deal_digital",
+   "csharp": {
+    "method": "SubscribeLiveDealAsync",
+    "args": {
+     "name": "live-deal-digital-option",
+     "asset": "EURUSD",
+     "type": "PT1M",
+     "size": 10
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"live-deal-digital-option\", \"params\": {\"routingFilters\": {\"instrument_active_id\": 1861, \"expiration_type\": \"PT1M\"}}, \"version\": \"2.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "unsubscribe_live_deal",
+   "csharp": {
+    "method": "UnsubscribeLiveDealAsync",
+    "args": {
+     "name": "live-deal",
+     "asset": "EURUSD",
+     "type": "forex"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"unsubscribeMessage\", \"msg\": {\"name\": \"live-deal\", \"params\": {\"routingFilters\": {\"instrument_active_id\": 1861, \"instrument_type\": \"forex\"}}, \"version\": \"2.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": true
+  },
+  {
+   "name": "get_live_deal",
+   "csharp": {
+    "method": "GetLiveDeal",
+    "args": {
+     "name": "live-deal-binary-option-placed",
+     "asset": "EURUSD",
+     "type": "turbo"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "live-deal-binary-option-placed",
+     "msg": {
+      "active_id": 1861,
+      "option_type": "turbo",
+      "amount": 5
+     }
+    },
+    {
+     "name": "live-deal-binary-option-placed",
+     "msg": {
+      "active_id": 1861,
+      "option_type": "turbo",
+      "amount": 6
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": [
+    {
+     "active_id": 1861,
+     "option_type": "turbo",
+     "amount": 6
+    },
+    {
+     "active_id": 1861,
+     "option_type": "turbo",
+     "amount": 5
+    }
+   ],
+   "compare_result": true
+  },
+  {
+   "name": "pop_live_deal",
+   "csharp": {
+    "method": "PopLiveDeal",
+    "args": {
+     "name": "live-deal-binary-option-placed",
+     "asset": "EURUSD",
+     "type": "turbo"
+    }
+   },
+   "setup_csharp": null,
+   "pre": [
+    {
+     "name": "live-deal-binary-option-placed",
+     "msg": {
+      "active_id": 1861,
+      "option_type": "turbo",
+      "amount": 5
+     }
+    },
+    {
+     "name": "live-deal-binary-option-placed",
+     "msg": {
+      "active_id": 1861,
+      "option_type": "turbo",
+      "amount": 6
+     }
+    }
+   ],
+   "rules": [],
+   "frames": [],
+   "result": {
+    "active_id": 1861,
+    "option_type": "turbo",
+    "amount": 5
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_user_profile_client",
+   "csharp": {
+    "method": "GetUserProfileClientAsync",
+    "args": {
+     "id": 777
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-user-profile-client",
+     "reply": [
+      {
+       "name": "user-profile-client",
+       "request_id": "",
+       "msg": {
+        "user_id": 777,
+        "user_name": "x"
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-user-profile-client\", \"body\": {\"user_id\": 777}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "user_id": 777,
+    "user_name": "x"
+   },
+   "compare_result": true
+  },
+  {
+   "name": "request_leaderboard_userinfo_deals_client",
+   "csharp": {
+    "method": "RequestLeaderboardUserinfoDealsClientAsync",
+    "args": {
+     "id": 777,
+     "country": 0
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:request-leaderboard-userinfo-deals-client",
+     "reply": [
+      {
+       "name": "leaderboard-userinfo-deals-client",
+       "request_id": "",
+       "msg": {
+        "isSuccessful": true,
+        "result": {}
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"request-leaderboard-userinfo-deals-client\", \"body\": {\"country_ids\": [0], \"requested_user_id\": 777}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "isSuccessful": true,
+    "result": {}
+   },
+   "compare_result": true
+  },
+  {
+   "name": "get_users_availability",
+   "csharp": {
+    "method": "GetUsersAvailabilityAsync",
+    "args": {
+     "id": 777
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [
+    {
+     "on": "sendMessage:get-users-availability",
+     "reply": [
+      {
+       "name": "users-availability",
+       "request_id": "",
+       "msg": {
+        "statuses": []
+       }
+      }
+     ]
+    }
+   ],
+   "frames": [
+    "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-users-availability\", \"body\": {\"user_ids\": [777]}, \"version\": \"1.0\"}, \"request_id\": \"\"}"
+   ],
+   "result": {
+    "statuses": []
+   },
+   "compare_result": true
   }
  ]
 }

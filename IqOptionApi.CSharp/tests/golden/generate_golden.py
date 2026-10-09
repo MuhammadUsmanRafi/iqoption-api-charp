@@ -713,6 +713,66 @@ def build_cases():
         {"name": "check_win_margin", "call": lambda iq: iq.check_win(4242, 0.01), "rules": [ORDER_FILLED, HISTORY_5151],
          "csharp": {"method": "CheckWinMarginAsync", "args": {"id": 4242, "polling": 0.01}}},
     ]
+    EXPOSURE = {"on": "sendMessage:get-active-exposure",
+                "reply": [{"name": "active-exposure", "request_id": "$RID", "msg": {"call": 0.6, "put": 0.4}}]}
+    MOOD = {"name": "traders-mood-changed", "msg": {"asset_id": 1861, "value": 0.55}}
+    DEAL5 = {"name": "live-deal-binary-option-placed", "msg": {"active_id": 1861, "option_type": "turbo", "amount": 5}}
+    DEAL6 = {"name": "live-deal-binary-option-placed", "msg": {"active_id": 1861, "option_type": "turbo", "amount": 6}}
+
+    def plain(name, call, method, args):
+        return {"name": name, "call": call, "csharp": {"method": method, "args": args}}
+
+    cases += [
+        {"name": "get_leader_board", "call": lambda iq: iq.get_leader_board("Worldwide", 1, 10, 5),
+         "rules": [{"on": "sendMessage:request-leaderboard-deals-client",
+                    "reply": [{"name": "leaderboard-deals-client", "request_id": "", "msg": {"result": {"positional": {}}}}]}],
+         "csharp": {"method": "GetLeaderBoardAsync", "args": {"country": "Worldwide", "from": 1, "to": 10, "near": 5}}},
+        {"name": "get_active_exposure_turbo", "delay": True, "rules": [EXPOSURE],
+         "call": lambda iq: iq.get_active_exposure("turbo-option", "EURUSD", 1),
+         "csharp": {"method": "GetActiveExposureAsync", "args": {"type": "turbo-option", "asset": "EURUSD", "minutes": 1}}},
+        {"name": "get_active_exposure_digital_5", "delay": True, "rules": [EXPOSURE],
+         "call": lambda iq: iq.get_active_exposure("digital-option", "EURUSD", 5),
+         "csharp": {"method": "GetActiveExposureAsync", "args": {"type": "digital-option", "asset": "EURUSD", "minutes": 5}}},
+        {"name": "start_mood_stream", "call": lambda iq: (iq.start_mood_stream("EURUSD"), iq.get_traders_mood("EURUSD"))[1],
+         "rules": [{"on": "subscribeMessage:traders-mood-changed", "reply": [MOOD]}],
+         "csharp": {"method": "StartMoodStreamAsync", "args": {"asset": "EURUSD"}}},
+        plain("stop_mood_stream", lambda iq: iq.stop_mood_stream("EURUSD"), "StopMoodStreamAsync", {"asset": "EURUSD"}),
+        {"name": "get_all_traders_mood", "pre": [MOOD, {"name": "traders-mood-changed", "msg": {"asset_id": 76, "value": 0.3}}],
+         "call": lambda iq: iq.get_all_traders_mood(), "csharp": {"method": "GetAllTradersMood", "args": {}}},
+        plain("subscribe_top_assets_updated", lambda iq: iq.subscribe_top_assets_updated("forex"), "SubscribeTopAssetsUpdatedAsync", {"type": "forex"}),
+        plain("unsubscribe_top_assets_updated", lambda iq: iq.unsubscribe_top_assets_updated("forex"), "UnsubscribeTopAssetsUpdatedAsync", {"type": "forex"}),
+        {"name": "get_top_assets_updated", "pre": [{"name": "top-assets-updated", "msg": {"instrument_type": "forex", "data": [{"active_id": 1861}]}}],
+         "call": lambda iq: iq.get_top_assets_updated("forex"), "csharp": {"method": "GetTopAssetsUpdated", "args": {"type": "forex"}}},
+        plain("subscribe_commission_changed", lambda iq: iq.subscribe_commission_changed("digital-option"), "SubscribeCommissionChangedAsync", {"type": "digital-option"}),
+        plain("unsubscribe_commission_changed", lambda iq: iq.unsubscribe_commission_changed("digital-option"), "UnsubscribeCommissionChangedAsync", {"type": "digital-option"}),
+        {"name": "get_commission_change",
+         "pre": [{"name": "commission-changed", "msg": {"instrument_type": "turbo-option", "active_id": 1861, "commission": {"value": 18}}}],
+         "call": lambda iq: iq.get_commission_change("turbo-option"), "csharp": {"method": "GetCommissionChange", "args": {"type": "turbo-option"}}},
+        plain("subscribe_live_deal", lambda iq: iq.subscribe_live_deal("live-deal-binary-option-placed", "EURUSD", "turbo", 10),
+              "SubscribeLiveDealAsync", {"name": "live-deal-binary-option-placed", "asset": "EURUSD", "type": "turbo", "size": 10}),
+        plain("subscribe_live_deal_digital", lambda iq: iq.subscribe_live_deal("live-deal-digital-option", "EURUSD", "PT1M", 10),
+              "SubscribeLiveDealAsync", {"name": "live-deal-digital-option", "asset": "EURUSD", "type": "PT1M", "size": 10}),
+        plain("unsubscribe_live_deal", lambda iq: iq.unscribe_live_deal("live-deal", "EURUSD", "forex"),
+              "UnsubscribeLiveDealAsync", {"name": "live-deal", "asset": "EURUSD", "type": "forex"}),
+        {"name": "get_live_deal", "pre": [DEAL5, DEAL6],
+         "call": lambda iq: list(iq.get_live_deal("live-deal-binary-option-placed", "EURUSD", "turbo")),
+         "csharp": {"method": "GetLiveDeal", "args": {"name": "live-deal-binary-option-placed", "asset": "EURUSD", "type": "turbo"}}},
+        {"name": "pop_live_deal", "pre": [DEAL5, DEAL6],
+         "call": lambda iq: iq.pop_live_deal("live-deal-binary-option-placed", "EURUSD", "turbo"),
+         "csharp": {"method": "PopLiveDeal", "args": {"name": "live-deal-binary-option-placed", "asset": "EURUSD", "type": "turbo"}}},
+        {"name": "get_user_profile_client", "call": lambda iq: iq.get_user_profile_client(777),
+         "rules": [{"on": "sendMessage:get-user-profile-client",
+                    "reply": [{"name": "user-profile-client", "request_id": "", "msg": {"user_id": 777, "user_name": "x"}}]}],
+         "csharp": {"method": "GetUserProfileClientAsync", "args": {"id": 777}}},
+        {"name": "request_leaderboard_userinfo_deals_client", "call": lambda iq: iq.request_leaderboard_userinfo_deals_client(777, 0),
+         "rules": [{"on": "sendMessage:request-leaderboard-userinfo-deals-client",
+                    "reply": [{"name": "leaderboard-userinfo-deals-client", "request_id": "", "msg": {"isSuccessful": True, "result": {}}}]}],
+         "csharp": {"method": "RequestLeaderboardUserinfoDealsClientAsync", "args": {"id": 777, "country": 0}}},
+        {"name": "get_users_availability", "call": lambda iq: iq.get_users_availability(777),
+         "rules": [{"on": "sendMessage:get-users-availability",
+                    "reply": [{"name": "users-availability", "request_id": "", "msg": {"statuses": []}}]}],
+         "csharp": {"method": "GetUsersAvailabilityAsync", "args": {"id": 777}}},
+    ]
     # @@CASES@@
     return cases
 

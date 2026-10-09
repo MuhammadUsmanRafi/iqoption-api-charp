@@ -162,6 +162,29 @@ internal static class Calls
             case "GetOvernightFeeAsync": { var (ok, m) = await api.GetOvernightFeeAsync(S(a, "type"), S(a, "asset")); return Tuple(ok, m); }
             case "CheckWinMarginAsync": return ToNode(await api.CheckWinMarginAsync(L(a, "id"), D(a, "polling")));
 
+            case "GetLeaderBoardAsync": return await api.GetLeaderBoardAsync(S(a, "country"), I(a, "from"), I(a, "to"), I(a, "near"));
+            case "GetActiveExposureAsync": return await api.GetActiveExposureAsync(S(a, "type"), S(a, "asset"), I(a, "minutes"));
+            case "StartMoodStreamAsync": await api.StartMoodStreamAsync(S(a, "asset")); return ToNode(api.GetTradersMood(S(a, "asset")));
+            case "StopMoodStreamAsync": await api.StopMoodStreamAsync(S(a, "asset")); return null;
+            case "GetAllTradersMood":
+                return new JsonObject(api.GetAllTradersMood().Select(x => KeyValuePair.Create(x.Key.ToString(CultureInfo.InvariantCulture), (JsonNode?)x.Value)));
+            case "SubscribeTopAssetsUpdatedAsync": await api.SubscribeTopAssetsUpdatedAsync(S(a, "type")); return null;
+            case "UnsubscribeTopAssetsUpdatedAsync": await api.UnsubscribeTopAssetsUpdatedAsync(S(a, "type")); return null;
+            case "GetTopAssetsUpdated": return api.GetTopAssetsUpdated(S(a, "type"))?.DeepClone();
+            case "SubscribeCommissionChangedAsync": await api.SubscribeCommissionChangedAsync(S(a, "type")); return null;
+            case "UnsubscribeCommissionChangedAsync": await api.UnsubscribeCommissionChangedAsync(S(a, "type")); return null;
+            case "GetCommissionChange":
+                return new JsonObject(api.GetCommissionChange(S(a, "type")).Select(x => KeyValuePair.Create(x.Key,
+                    (JsonNode?)new JsonObject(x.Value.Select(y => KeyValuePair.Create(PyJson.FloatRepr(y.Key), (JsonNode?)y.Value))))));
+            case "SubscribeLiveDealAsync": await api.SubscribeLiveDealAsync(S(a, "name"), S(a, "asset"), S(a, "type"), I(a, "size")); return null;
+            case "UnsubscribeLiveDealAsync": await api.UnsubscribeLiveDealAsync(S(a, "name"), S(a, "asset"), S(a, "type")); return null;
+            case "GetLiveDeal":
+                return new JsonArray(api.GetLiveDeal(S(a, "name"), S(a, "asset"), S(a, "type")).Select(x => (JsonNode?)x.DeepClone()).ToArray());
+            case "PopLiveDeal": return api.PopLiveDeal(S(a, "name"), S(a, "asset"), S(a, "type"))?.DeepClone();
+            case "GetUserProfileClientAsync": return await api.GetUserProfileClientAsync(L(a, "id"));
+            case "RequestLeaderboardUserinfoDealsClientAsync": return await api.RequestLeaderboardUserinfoDealsClientAsync(L(a, "id"), I(a, "country"));
+            case "GetUsersAvailabilityAsync": return await api.GetUsersAvailabilityAsync(L(a, "id"));
+
             // @@CALLS@@
             default:
                 throw new ArgumentException("No C# adapter for " + method);
