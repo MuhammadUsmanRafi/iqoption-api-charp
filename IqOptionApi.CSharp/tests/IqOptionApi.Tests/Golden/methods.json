@@ -1,0 +1,59 @@
+{
+ "fixtures": {
+  "T": 1791549020,
+  "tz": "Asia/Karachi",
+  "real_id": 10001,
+  "practice_id": 10004,
+  "profile": {
+   "name": "profile",
+   "request_id": "$RID",
+   "msg": {
+    "user_id": 777,
+    "name": "Test User",
+    "currency": "USD",
+    "balance_id": 10004
+   }
+  },
+  "balances": {
+   "name": "balances",
+   "request_id": "$RID",
+   "msg": [
+    {
+     "id": 10001,
+     "type": 1,
+     "amount": 0,
+     "currency": "USD"
+    },
+    {
+     "id": 10004,
+     "type": 4,
+     "amount": 10000.5,
+     "currency": "USD"
+    }
+   ]
+  },
+  "time_sync": {
+   "name": "timeSync",
+   "msg": 1791549020000
+  }
+ },
+ "cases": [
+  {
+   "name": "heartbeat_reply",
+   "csharp": {
+    "method": "Heartbeat",
+    "args": {
+     "heartbeatTime": 1791549020123
+    }
+   },
+   "setup_csharp": null,
+   "pre": [],
+   "rules": [],
+   "frames": [
+    "{\"name\": \"heartbeat\", \"msg\": {\"msg\": {\"heartbeatTime\": 1791549020123, \"userTime\": 1791549020000}}, \"request_id\": \"\"}"
+   ],
+   "result": null,
+   "compare_result": false
+  }
+ ]
+}

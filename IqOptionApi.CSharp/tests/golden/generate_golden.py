@@ -117,6 +117,7 @@ def replies_for(frame, rules):
 DELIVERY = queue.Queue()
 CONNECT_RULES = []
 FRAMES = []
+APPS = []
 
 
 class FakeWebSocketApp:
@@ -127,6 +128,7 @@ class FakeWebSocketApp:
         self.on_message = on_message
         self.on_open = on_open
         self.sock = None
+        APPS.append(self)
 
     def run_forever(self, **kwargs):
         self.on_open(self)
@@ -327,11 +329,89 @@ def part_router():
 
 
 def part_connect():
-    pass
+    global CONNECT_RULES
+    from iqoptionapi.stable_api import IQ_Option
+    CONNECT_RULES = [
+        {"on": "authenticate", "reply": [{"name": "authenticated", "msg": True, "request_id": "$RID"}]},
+        {"on": "sendMessage:get-profile", "reply": [PROFILE]},
+        {"on": "sendMessage:get-balances", "reply": [BALANCES]},
+    ]
+    stop = threading.Event()
+
+    def time_pusher():
+        while not stop.is_set():
+            for app in list(APPS):
+                DELIVERY.put((app, json.dumps(TIME_SYNC)))
+            _real_sleep(0.02)
+
+    threading.Thread(target=time_pusher, daemon=True).start()
+    iq = IQ_Option("user@example.com", "secret")
+    ok, reason = iq.connect()
+    stop.set()
+    login = [h for h in HTTP_LOG if h["url"].endswith("/api/v2/login")][0]
+    write("connect.json", {"fixtures": fixtures(), "ok": ok, "frames": list(FRAMES),
+                           "login_url": login["url"],
+                           "login_form": {k: v for k, v in login["data"].items() if v is not None}})
+
+
+def amount_of(raw):
+    import iqoptionapi.global_value as gv
+    return next((b["amount"] for b in raw["msg"] if b["id"] == gv.balance_id[1]), None)
+
+
+def actives_items():
+    import iqoptionapi.constants as OP_code
+    return [[k, v] for k, v in OP_code.ACTIVES.items()]
+
+
+def run_case(case):
+    import iqoptionapi.constants as OP_code
+    saved = list(OP_code.ACTIVES.items())
+    iq, api = make_client()
+    frames = []
+    rules = case.get("rules", [])
+    delay = case.get("delay", False)
+
+    def deliver(reply):
+        raw = json.dumps(reply)
+        if delay:
+            threading.Timer(0.05, api.websocket_client.on_message, args=(None, raw)).start()
+        else:
+            api.websocket_client.on_message(None, raw)
+
+    def fake_send(name, msg, request_id="", no_force_send=True):
+        data = json.dumps(dict(name=name, msg=msg, request_id=request_id))
+        frames.append(data)
+        for reply in replies_for(json.loads(data), rules):
+            deliver(reply)
+
+    api.send_websocket_request = fake_send
+    for m in case.get("pre", []):
+        api.websocket_client.on_message(None, json.dumps(m))
+    if "setup" in case:
+        case["setup"](iq, api)
+    result = case["call"](iq)
+    OP_code.ACTIVES.clear()
+    OP_code.ACTIVES.update(saved)
+    return {"name": case["name"], "csharp": case["csharp"], "setup_csharp": case.get("setup_csharp"),
+            "pre": case.get("pre", []), "rules": rules, "frames": frames,
+            "result": to_json(result), "compare_result": case.get("compare_result", True)}
+
+
+def build_cases():
+    cases = []
+    cases += [
+        {"name": "heartbeat_reply",
+         "call": lambda iq: iq.api.websocket_client.on_message(None, json.dumps({"name": "heartbeat", "msg": 1791549020123})),
+         "csharp": {"method": "Heartbeat", "args": {"heartbeatTime": 1791549020123}}, "compare_result": False},
+    ]
+    # @@CASES@@
+    return cases
 
 
 def part_methods():
-    pass
+    write("methods.json", {"fixtures": fixtures(), "cases": [run_case(c) for c in build_cases()]})
+
 
 
 def run_part(part, tz):

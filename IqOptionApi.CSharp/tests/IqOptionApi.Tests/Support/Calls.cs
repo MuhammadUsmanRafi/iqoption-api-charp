@@ -1,0 +1,79 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
+
+namespace IqOptionApi.Tests;
+
+/// <summary>Maps a golden case to a C# call and turns the C# result into the Python result's JSON shape.</summary>
+internal static class Calls
+{
+    public static async Task<JsonNode?> InvokeAsync(IqOption api, FakeSocket socket, string method, JsonObject a)
+    {
+        switch (method)
+        {
+            case "Heartbeat":
+            {
+                socket.Push("{\"name\":\"heartbeat\",\"msg\":" + L(a, "heartbeatTime").ToString(CultureInfo.InvariantCulture) + "}");
+                await api.Conn.WaitUntilAsync(() => { lock (socket.Frames) return socket.Frames.Count > 0; }, TimeSpan.FromSeconds(5), default);
+                return null;
+            }
+            // @@CALLS@@
+            default:
+                throw new ArgumentException("No C# adapter for " + method);
+        }
+    }
+
+    public static void Setup(IqOption api, string? setup)
+    {
+        if (setup == null) return;
+        var parts = setup.Split(':');
+        var s = api.StateForTests;
+        lock (s.Lock)
+        {
+            switch (parts[0])
+            {
+                case "candle_check": State.GetOrAdd(s.CandleCheck, parts[1])[int.Parse(parts[2], CultureInfo.InvariantCulture)] = true; break;
+                case "all_size_check": s.AllSizeCheck[parts[1]] = true; break;
+                default: throw new ArgumentException("unknown setup " + setup);
+            }
+        }
+    }
+
+    internal static JsonArray Tuple(params object?[] items) => new(items.Select(ToNode).ToArray());
+
+    internal static JsonNode? ToNode(object? o) => o switch
+    {
+        null => null,
+        JsonNode n => n.DeepClone(),
+        bool b => b,
+        string s => s,
+        int i => i,
+        long l => l,
+        double d => d,
+        _ => throw new ArgumentException("cannot convert " + o.GetType().Name),
+    };
+
+    internal static string S(JsonObject a, string k) => (string)a[k]!;
+
+    internal static int I(JsonObject a, string k) => (int)J.Long(a[k]);
+
+    internal static long L(JsonObject a, string k) => J.Long(a[k]);
+
+    internal static double D(JsonObject a, string k) => J.Dbl(a[k]);
+
+    internal static bool B(JsonObject a, string k) => J.IsTrue(a[k]);
+
+    internal static string? SN(JsonObject a, string k) => J.IsNull(a[k]) ? null : (string)a[k]!;
+
+    internal static double? DN(JsonObject a, string k) => J.DblOrNull(a[k]);
+
+    internal static Direction Dir(JsonObject a) => S(a, "direction") == "call" ? Direction.Call : Direction.Put;
+
+    internal static BalanceMode Mode(JsonObject a) => S(a, "mode") == "REAL" ? BalanceMode.Real : BalanceMode.Practice;
+
+    internal static List<string> Strings(JsonObject a, string k) => a[k]!.AsArray().Select(x => (string)x!).ToList();
+
+    internal static List<long> Longs(JsonObject a, string k) => a[k]!.AsArray().Select(x => J.Long(x)).ToList();
+
+    internal static JsonArray Items(IEnumerable<KeyValuePair<string, int>> items) =>
+        new(items.Select(p => (JsonNode?)new JsonArray(p.Key, p.Value)).ToArray());
+}

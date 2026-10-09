@@ -1,0 +1,77 @@
+{
+ "fixtures": {
+  "T": 1791549020,
+  "tz": "Asia/Karachi",
+  "real_id": 10001,
+  "practice_id": 10004,
+  "profile": {
+   "name": "profile",
+   "request_id": "$RID",
+   "msg": {
+    "user_id": 777,
+    "name": "Test User",
+    "currency": "USD",
+    "balance_id": 10004
+   }
+  },
+  "balances": {
+   "name": "balances",
+   "request_id": "$RID",
+   "msg": [
+    {
+     "id": 10001,
+     "type": 1,
+     "amount": 0,
+     "currency": "USD"
+    },
+    {
+     "id": 10004,
+     "type": 4,
+     "amount": 10000.5,
+     "currency": "USD"
+    }
+   ]
+  },
+  "time_sync": {
+   "name": "timeSync",
+   "msg": 1791549020000
+  }
+ },
+ "ok": true,
+ "frames": [
+  "{\"name\": \"authenticate\", \"msg\": {\"ssid\": \"SSID-TEST\", \"protocol\": 3}, \"request_id\": \"1\"}",
+  "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-profile\", \"version\": \"1.0\", \"body\": {}}, \"request_id\": \"\"}",
+  "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}",
+  "{\"name\": \"sendMessage\", \"msg\": {\"name\": \"get-balances\", \"version\": \"1.0\"}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"cfd\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"forex\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"crypto\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"turbo-option\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"binary-option\", \"user_balance_id\": 10001}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"cfd\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"forex\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"crypto\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"turbo-option\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.position-changed\", \"version\": \"2.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"binary-option\", \"user_balance_id\": 10004}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"internal-billing.balance-created\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"internal-billing.auth-balance-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"internal-billing.balance-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"internal-billing.marginal-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"tournaments.user-registered-in-tournament\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"tournaments.user-tournament-position-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"cfd\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"forex\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"crypto\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"digital-option\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"turbo-option\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"subscribeMessage\", \"msg\": {\"name\": \"portfolio.order-changed\", \"version\": \"1.0\", \"params\": {\"routingFilters\": {\"instrument_type\": \"binary-option\"}}}, \"request_id\": \"\"}",
+  "{\"name\": \"setOptions\", \"msg\": {\"sendResults\": true}, \"request_id\": \"\"}"
+ ],
+ "login_url": "https://auth.iqoption.com/api/v2/login",
+ "login_form": {
+  "identifier": "user@example.com",
+  "password": "secret"
+ }
+}
