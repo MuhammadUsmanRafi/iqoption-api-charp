@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>IqOptionApi</RootNamespace>
+    <AssemblyName>IqOptionApi</AssemblyName>
+    <Version>9.4.0</Version>
+    <Description>C# port of the Python iqoptionapi library (v9.4).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="IqOptionApi.Tests" />
+  </ItemGroup>
+</Project>
