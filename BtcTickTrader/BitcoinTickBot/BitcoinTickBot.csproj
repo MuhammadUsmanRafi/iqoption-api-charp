@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\IqOptionApi.CSharp\src\IqOptionApi\IqOptionApi.csproj" />
+    <!-- The bot reads the same shared-memory layout the feeder writes, so it compiles the feeder's file. -->
+    <Compile Include="..\PriceFeeder\TickRing.cs" Link="TickRing.cs" />
+    <Compile Include="..\PriceFeeder\DotEnv.cs" Link="DotEnv.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+</Project>

@@ -55,6 +55,10 @@ It connects, prints your balance, shows 10 candles, streams live candles for 30 
 **Safety lock:** it refuses to run unless the selected balance is PRACTICE. Pass `--allow-real` to override.
 Use an `-OTC` asset at weekends, when the normal markets are closed.
 
+### MT5 tick trader (two programs, shared memory)
+
+`BtcTickTrader/` (next to this folder, at the top of the repo) has an MT5 Bitcoin price feeder and a bot that trades IQ Option blitz/turbo when the price moves past a threshold. They talk through shared memory. See [../BtcTickTrader/README.md](../BtcTickTrader/README.md).
+
 ### Bitcoin bot (all four products)
 
 ```bash
@@ -191,6 +195,8 @@ Invalid `size` (not in `CandleSizes`) → `ArgumentOutOfRangeException` (Python 
 | `Task<List<long?>> BuyMultiAsync(IList<double> amounts, IList<string> assets, IList<Direction> directions, IList<int> minutes)` | `buy_multi` (length mismatch → `ArgumentException`) |
 | `Task<(bool Success, JsonObject? Result, string? Error)> BuyByRawExpirationAsync(double amount, string asset, Direction direction, string optionType, long expired)` (+ overloads taking `int activeId` / `int optionTypeId`) | `buy_by_raw_expirations` (reports failures, fix 8) |
 | `Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds = 30)` | `buy_blitz` (same duration validation → `ArgumentOutOfRangeException`) |
+| `BuyBlitzAsync(amount, asset, direction, durationSeconds, int profitPercent)` | — (C# only) same frame, but uses the payout you pass instead of requesting it first; one round trip less |
+| `Task<int?> GetBlitzProfitPercentAsync(string asset)` | — (C# only) blitz payout percent as the buy sends it, or null when closed |
 | `Task<JsonObject?> SellOptionAsync(IEnumerable<long> optionIds)` | `sell_option` (returns the `sold-options` reply if it arrives within the timeout, else null) |
 | `Task<(TradeResult Result, double Profit)> CheckWinAsync(long optionId)` | `check_win_v3` (+ `check_win_v2`, `get_betinfo`): waits for `option-closed` or a closed `position-changed`, profit = payout − stake; works for binary, turbo and blitz |
 | `Task<JsonObject> GetOptionInfoAsync(int limit)` | `get_optioninfo`, `get_optioninfo_v2` (v2 frame) |

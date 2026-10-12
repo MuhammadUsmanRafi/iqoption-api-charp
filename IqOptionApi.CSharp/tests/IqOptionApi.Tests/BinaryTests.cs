@@ -32,6 +32,23 @@ public class BinaryTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => api.BuyBlitzAsync(1, "EURUSD", Direction.Call, 30));
     }
 
+    // With a known payout the buy is the only frame sent: no payout request first (latency-sensitive bots).
+    [Fact]
+    public async Task Blitz_WithKnownPayout_SendsOnlyTheBuy()
+    {
+        var (api, socket, _) = await Harness.ConnectedAsync(Golden.Load("methods.json")["fixtures"]!.AsObject());
+        await using var _ = api;
+        socket.TakeFrames();
+        socket.Rules = new() { new Rule("sendMessage:binary-options.open-option", new() { System.Text.Json.Nodes.JsonNode.Parse("{\"name\":\"option\",\"request_id\":\"$RID\",\"msg\":{\"id\":777}}")!.AsObject() }) };
+        var (ok, result, error) = await api.BuyBlitzAsync(1, "EURUSD", Direction.Put, 60, 87);
+        Assert.True(ok, error);
+        Assert.Equal(777, result!["id"]!.GetValue<long>());
+        var body = System.Text.Json.Nodes.JsonNode.Parse(Assert.Single(socket.TakeFrames()))!["msg"]!["body"]!;
+        Assert.Equal(87, body["profit_percent"]!.GetValue<int>());
+        Assert.Equal(60, body["expiration_size"]!.GetValue<int>());
+        Assert.Equal(12, body["option_type_id"]!.GetValue<int>());
+    }
+
     // Live server (Oct 2026) no longer sends option-closed; a closed option arrives as position-changed (captured from a real practice trade).
     [Fact]
     public async Task CheckWin_UnderstandsClosedPositionChanged()

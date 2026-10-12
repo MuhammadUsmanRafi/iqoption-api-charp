@@ -1349,16 +1349,30 @@ public sealed class IqOption : IAsyncDisposable
     public async Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds = 30, CancellationToken ct = default)
     {
         EnsureConnected();
-        long? balance = GetBalanceId();
-        int activeId = Act(asset);
-        bool otc = asset.ToUpperInvariant().EndsWith("-OTC", StringComparison.Ordinal);
-        var (min, max) = otc ? (30, 300) : (60, 900);
-        if (durationSeconds < min || durationSeconds > max)
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), $"Blitz expiry for {(otc ? "OTC" : "normal")} pairs must be between {min}s and {max}s. You gave: {durationSeconds}");
-        double expired = Now + durationSeconds;
+        CheckBlitzDuration(asset, durationSeconds);
         int profitPercent = 0;
         var blitz = await GetAllProfitBlitzAsync(ct).ConfigureAwait(false);
         if (blitz.TryGetValue(asset, out var p) && p.TryGetValue("blitz", out double fraction)) profitPercent = Helpers.BlitzPercent(fraction);
+        return await BuyBlitzAsync(amount, asset, direction, durationSeconds, profitPercent, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Buys a blitz option with a payout you already know (see <see cref="GetBlitzProfitPercentAsync"/>), so no
+    /// payout request is made first. Use it when latency matters; the frame is the same as the other overload's.
+    /// </summary>
+    /// <param name="amount">Stake.</param>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="direction">Call or put.</param>
+    /// <param name="durationSeconds">Expiry in seconds.</param>
+    /// <param name="profitPercent">Blitz payout percent, e.g. 87.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<(bool Success, JsonObject? Result, string? Error)> BuyBlitzAsync(double amount, string asset, Direction direction, int durationSeconds, int profitPercent, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        CheckBlitzDuration(asset, durationSeconds);
+        long? balance = GetBalanceId();
+        int activeId = Act(asset);
+        double expired = Now + durationSeconds;
         try
         {
             return OptionReply(await ById("option", new Obj
@@ -1382,6 +1396,23 @@ public sealed class IqOption : IAsyncDisposable
         {
             return (false, null, Reason(ex));
         }
+    }
+
+    /// <summary>Blitz payout percent for <paramref name="asset"/> as the blitz buy sends it (e.g. 87), or null when blitz is closed for it.</summary>
+    /// <param name="asset">Asset name.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<int?> GetBlitzProfitPercentAsync(string asset, CancellationToken ct = default)
+    {
+        var blitz = await GetAllProfitBlitzAsync(ct).ConfigureAwait(false);
+        return blitz.TryGetValue(asset, out var p) && p.TryGetValue("blitz", out double fraction) ? Helpers.BlitzPercent(fraction) : null;
+    }
+
+    private static void CheckBlitzDuration(string asset, int durationSeconds)
+    {
+        bool otc = asset.ToUpperInvariant().EndsWith("-OTC", StringComparison.Ordinal);
+        var (min, max) = otc ? (30, 300) : (60, 900);
+        if (durationSeconds < min || durationSeconds > max)
+            throw new ArgumentOutOfRangeException(nameof(durationSeconds), $"Blitz expiry for {(otc ? "OTC" : "normal")} pairs must be between {min}s and {max}s. You gave: {durationSeconds}");
     }
 
     /// <summary>Sells options early (Python <c>sell_option</c>); returns the server's reply, or null if none came.</summary>
